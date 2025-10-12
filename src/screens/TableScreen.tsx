@@ -91,13 +91,19 @@ export default function TableScreen() {
               onPress={() =>
                 Alert.alert(
                   "Reiniciar datos",
-                  "Se restaurarán las categorías y temas por defecto. ¿Continuar?",
+                  "Se restaurarán las categorías y temas por defecto y volverás a elegir oposición. ¿Continuar?",
                   [
                     { text: "Cancelar", style: "cancel" },
                     {
                       text: "Reiniciar",
                       style: "destructive",
-                      onPress: () => resetAll(),
+                      onPress: () => {
+                        resetAll();
+                        navigation.reset({
+                          index: 0,
+                          routes: [{ name: "Selecciona oposición" }],
+                        });
+                      },
                     },
                   ]
                 )

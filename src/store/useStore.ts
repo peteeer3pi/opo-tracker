@@ -20,11 +20,14 @@ export type Topic = {
 export type StoreState = {
   categories: Category[];
   topics: Topic[];
+  selectedOpposition?: string;
+  hasHydrated: boolean;
   addCategory: (name: string) => void;
   removeCategory: (categoryId: string) => void;
   renameCategory: (categoryId: string, name: string) => void;
   moveCategory: (categoryId: string, toIndex: number) => void;
   reorderCategories: (orderedIds: string[]) => void;
+  setOpposition: (name: string) => void;
   addTopic: (title: string) => void;
   bulkAddTopics: (titles: string[]) => void;
   removeTopic: (topicId: string) => void;
@@ -44,9 +47,12 @@ const DEFAULT_CATEGORIES: Category[] = [
 
 const DEFAULT_OPPOSITION = "Oposición Física y Química";
 
-const seedTopics = (categories: Category[]): Topic[] => {
+const seedTopics = (
+  categories: Category[],
+  oppositionName?: string
+): Topic[] => {
   const now = Date.now();
-  const titles = TOPIC_TITLES[DEFAULT_OPPOSITION] ?? [];
+  const titles = oppositionName ? TOPIC_TITLES[oppositionName] ?? [] : [];
   return titles.map((title, idx) => ({
     id: `t_${idx + 1}`,
     title,
@@ -60,7 +66,17 @@ export const useStore = create<StoreState>()(
   persist(
     (set, get) => ({
       categories: DEFAULT_CATEGORIES,
-      topics: seedTopics(DEFAULT_CATEGORIES),
+      selectedOpposition: undefined,
+      topics: [],
+      hasHydrated: false,
+
+      setOpposition: (name) => {
+        const clean = name.trim();
+        if (!clean) return;
+        const categories = get().categories;
+        const topics = seedTopics(categories, clean);
+        set({ selectedOpposition: clean, topics });
+      },
 
       addCategory: (name) => {
         const clean = name.trim();
@@ -218,8 +234,7 @@ export const useStore = create<StoreState>()(
 
       resetAll: () => {
         const categories = DEFAULT_CATEGORIES;
-        const topics = seedTopics(categories);
-        set({ categories, topics });
+        set({ categories, topics: [], selectedOpposition: undefined });
       },
     }),
     {
@@ -228,7 +243,11 @@ export const useStore = create<StoreState>()(
       partialize: (state) => ({
         categories: state.categories,
         topics: state.topics,
+        selectedOpposition: state.selectedOpposition,
       }),
+      onRehydrateStorage: () => () => {
+        useStore.setState({ hasHydrated: true });
+      },
     }
   )
 );
