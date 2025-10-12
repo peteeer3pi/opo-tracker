@@ -25,3 +25,30 @@ export function globalProgress(
   );
   return done / totalCells;
 }
+
+export function folderProgress(
+  topics: Topic[],
+  categories: Category[],
+  folderId?: string
+): number {
+  const subset = topics.filter((t) =>
+    folderId ? t.folderId === folderId : !t.folderId
+  );
+  return globalProgress(subset, categories);
+}
+
+export function folderTotals(
+  topics: Topic[],
+  categories: Category[],
+  folderId?: string
+): { done: number; total: number } {
+  const subset = topics.filter((t) =>
+    folderId ? t.folderId === folderId : !t.folderId
+  );
+  const total = subset.length * categories.length;
+  const done = subset.reduce(
+    (acc, t) => acc + Object.values(t.checks).filter(Boolean).length,
+    0
+  );
+  return { done, total };
+}
