@@ -2,7 +2,6 @@ import React, { useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
-  FlatList,
   StyleSheet,
   Animated,
   ScrollView,
@@ -23,9 +22,15 @@ import {
   Portal,
   Dialog,
   IconButton,
+  Menu,
 } from "react-native-paper";
 import { useStore } from "../store/useStore";
-import { globalProgress, topicProgress } from "../utils/progress";
+import {
+  globalProgress,
+  topicProgress,
+  folderProgress,
+  folderTotals,
+} from "../utils/progress";
 
 export default function TableScreen() {
   const navigation =
@@ -33,8 +38,13 @@ export default function TableScreen() {
   const {
     topics,
     categories,
+    folders,
     toggleCheck,
     addTopic,
+    addFolder,
+    renameFolder,
+    removeFolder,
+    moveTopicToFolder,
     resetAll,
     incrementReview,
     decrementReview,
@@ -43,6 +53,20 @@ export default function TableScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [showNote, setShowNote] = useState(false);
   const [noteToShow, setNoteToShow] = useState("");
+  const [showAddFolder, setShowAddFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [showRenameFolder, setShowRenameFolder] = useState(false);
+  const [renameFolderName, setRenameFolderName] = useState("");
+  const [renameFolderId, setRenameFolderId] = useState<string | undefined>(
+    undefined
+  );
+  const [folderMenuOpenId, setFolderMenuOpenId] = useState<string | undefined>(
+    undefined
+  );
+  const [showMove, setShowMove] = useState(false);
+  const [movingTopicId, setMovingTopicId] = useState<string | undefined>(
+    undefined
+  );
 
   const global = useMemo(
     () => globalProgress(topics, categories),
@@ -87,6 +111,14 @@ export default function TableScreen() {
             </Button>
             <Button
               mode="text"
+              icon="folder-plus-outline"
+              onPress={() => setShowAddFolder(true)}
+              style={styles.actionBtn}
+            >
+              Nueva carpeta
+            </Button>
+            <Button
+              mode="text"
               icon="backup-restore"
               onPress={() =>
                 Alert.alert(
@@ -127,91 +159,313 @@ export default function TableScreen() {
         </Card.Content>
       </Card>
 
-      <FlatList
-        data={topics}
-        keyExtractor={(t) => t.id}
+      <ScrollView
         contentContainerStyle={
           topics.length === 0 ? styles.emptyContainer : styles.list
         }
-        ListEmptyComponent={
+      >
+        {topics.length === 0 ? (
           <Text style={styles.empty}>Añade tu primer tema</Text>
-        }
-        renderItem={({ item }) => {
-          const prog = topicProgress(item, categories.length);
-          return (
-            <TouchableOpacity
-              onPress={() => navigation.navigate("Tema", { topicId: item.id })}
-            >
-              <Card mode="outlined" style={styles.rowCard}>
-                <Card.Title
-                  title={item.title}
-                  right={() => (
-                    <View style={styles.rightIcons}>
-                      {item.note && item.note.trim().length > 0 ? (
-                        <IconButton
-                          icon="information-outline"
-                          size={16}
-                          onPress={() => {
-                            setNoteToShow(item.note as string);
-                            setShowNote(true);
-                          }}
-                        />
-                      ) : null}
-                    </View>
-                  )}
-                />
-                <Card.Content>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.checkboxRow}>
-                      {categories.map((c) => (
-                        <Pressable
-                          key={c.id}
-                          style={styles.checkboxItem}
-                          onPress={() => toggleCheck(item.id, c.id)}
-                          hitSlop={8}
-                        >
-                          <Checkbox
-                            status={item.checks[c.id] ? "checked" : "unchecked"}
-                            onPress={() => toggleCheck(item.id, c.id)}
+        ) : (
+          <>
+            {folders.map((f) => {
+              const sectionTopics = topics.filter((t) => t.folderId === f.id);
+              if (sectionTopics.length === 0) return null;
+              const prog = globalProgress(sectionTopics, categories);
+              const { done, total } = folderTotals(sectionTopics, categories);
+              return (
+                <View key={f.id} style={styles.folderSection}>
+                  <View style={styles.folderHeader}>
+                    <Text style={styles.folderTitle}>{f.name}</Text>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <Menu
+                        visible={folderMenuOpenId === f.id}
+                        onDismiss={() => setFolderMenuOpenId(undefined)}
+                        anchor={
+                          <IconButton
+                            icon="dots-vertical"
+                            size={18}
+                            onPress={() => setFolderMenuOpenId(f.id)}
                           />
-                          <Text style={styles.checkboxLabel}>{c.name}</Text>
-                        </Pressable>
-                      ))}
+                        }
+                      >
+                        <Menu.Item
+                          onPress={() => {
+                            setFolderMenuOpenId(undefined);
+                            setRenameFolderId(f.id);
+                            setRenameFolderName(f.name);
+                            setShowRenameFolder(true);
+                          }}
+                          title="Renombrar"
+                          leadingIcon="pencil-outline"
+                        />
+                        <Menu.Item
+                          onPress={() => {
+                            setFolderMenuOpenId(undefined);
+                            Alert.alert(
+                              "Eliminar carpeta",
+                              "Los temas no se borrarán, solo quedarán sin carpeta. ¿Eliminar?",
+                              [
+                                { text: "Cancelar", style: "cancel" },
+                                {
+                                  text: "Eliminar",
+                                  style: "destructive",
+                                  onPress: () => removeFolder(f.id),
+                                },
+                              ]
+                            );
+                          }}
+                          title="Eliminar"
+                          leadingIcon="delete-outline"
+                        />
+                      </Menu>
                     </View>
-                  </ScrollView>
-                  <ProgressBar progress={prog} style={styles.progressSmall} />
-                  {(() => {
-                    const repasadoCat = categories.find(
-                      (c) =>
-                        c.id === "repasado" ||
-                        c.name.toLowerCase() === "repasado"
-                    );
-                    const showReview = repasadoCat
-                      ? !!item.checks[repasadoCat.id]
-                      : false;
-                    if (!showReview) return null;
+                  </View>
+                  <Text
+                    style={styles.folderGlobalTitle}
+                  >{`Progreso ${Math.round(prog * 100)}%`}</Text>
+                  <ProgressBar
+                    progress={prog}
+                    style={[styles.progress, styles.folderProgress]}
+                  />
+                  {sectionTopics.map((item) => {
+                    const progT = topicProgress(item, categories.length);
                     return (
-                      <View style={styles.reviewRow}>
-                        <Chip
-                          mode="outlined"
-                          compact
-                          icon="plus-circle"
-                          accessibilityLabel="Sumar repaso (mantén pulsado para restar)"
-                          onPress={() => incrementReview(item.id)}
-                          onLongPress={() => decrementReview(item.id)}
-                          style={styles.reviewChip}
-                        >
-                          {`Repasos: ${item.reviewCount ?? 0}`}
-                        </Chip>
-                      </View>
+                      <TouchableOpacity
+                        key={item.id}
+                        onPress={() =>
+                          navigation.navigate("Tema", { topicId: item.id })
+                        }
+                      >
+                        <Card mode="outlined" style={styles.rowCard}>
+                          <Card.Title
+                            title={item.title}
+                            right={() => (
+                              <View style={styles.rightIcons}>
+                                <IconButton
+                                  icon="folder-move-outline"
+                                  size={18}
+                                  onPress={() => {
+                                    setMovingTopicId(item.id);
+                                    setShowMove(true);
+                                  }}
+                                />
+                                {item.note && item.note.trim().length > 0 ? (
+                                  <IconButton
+                                    icon="information-outline"
+                                    size={16}
+                                    onPress={() => {
+                                      setNoteToShow(item.note as string);
+                                      setShowNote(true);
+                                    }}
+                                  />
+                                ) : null}
+                              </View>
+                            )}
+                          />
+                          <Card.Content>
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                            >
+                              <View style={styles.checkboxRow}>
+                                {categories.map((c) => (
+                                  <Pressable
+                                    key={c.id}
+                                    style={styles.checkboxItem}
+                                    onPress={() => toggleCheck(item.id, c.id)}
+                                    hitSlop={8}
+                                  >
+                                    <Checkbox
+                                      status={
+                                        item.checks[c.id]
+                                          ? "checked"
+                                          : "unchecked"
+                                      }
+                                      onPress={() => toggleCheck(item.id, c.id)}
+                                    />
+                                    <Text style={styles.checkboxLabel}>
+                                      {c.name}
+                                    </Text>
+                                  </Pressable>
+                                ))}
+                              </View>
+                            </ScrollView>
+                            <ProgressBar
+                              progress={progT}
+                              style={styles.progressSmall}
+                            />
+                            {(() => {
+                              const repasadoCat = categories.find(
+                                (c) =>
+                                  c.id === "repasado" ||
+                                  c.name.toLowerCase() === "repasado"
+                              );
+                              const showReview = repasadoCat
+                                ? !!item.checks[repasadoCat.id]
+                                : false;
+                              if (!showReview) return null;
+                              return (
+                                <View style={styles.reviewRow}>
+                                  <Text style={styles.reviewLabel}>
+                                    Repasos
+                                  </Text>
+                                  <IconButton
+                                    icon="minus-circle-outline"
+                                    size={18}
+                                    onPress={() => decrementReview(item.id)}
+                                    disabled={(item.reviewCount ?? 0) <= 0}
+                                  />
+                                  <Text style={styles.reviewCountText}>
+                                    {item.reviewCount ?? 0}
+                                  </Text>
+                                  <IconButton
+                                    icon="plus-circle-outline"
+                                    size={18}
+                                    onPress={() => incrementReview(item.id)}
+                                  />
+                                </View>
+                              );
+                            })()}
+                          </Card.Content>
+                        </Card>
+                      </TouchableOpacity>
                     );
-                  })()}
-                </Card.Content>
-              </Card>
-            </TouchableOpacity>
-          );
-        }}
-      />
+                  })}
+                </View>
+              );
+            })}
+
+            {(() => {
+              const sectionTopics = topics.filter((t) => !t.folderId);
+              if (sectionTopics.length === 0) return null;
+              const prog = folderProgress(sectionTopics, categories, undefined);
+              const { done, total } = folderTotals(
+                sectionTopics,
+                categories,
+                undefined
+              );
+              return (
+                <View key="__none__" style={styles.folderSection}>
+                  <View style={styles.folderHeader}>
+                    <Text style={styles.folderTitle}>Sin carpeta</Text>
+                  </View>
+                  {sectionTopics.map((item) => {
+                    const progT = topicProgress(item, categories.length);
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        onPress={() =>
+                          navigation.navigate("Tema", { topicId: item.id })
+                        }
+                      >
+                        <Card mode="outlined" style={styles.rowCard}>
+                          <Card.Title
+                            title={item.title}
+                            right={() => (
+                              <View style={styles.rightIcons}>
+                                <IconButton
+                                  icon="folder-move-outline"
+                                  size={18}
+                                  onPress={() => {
+                                    setMovingTopicId(item.id);
+                                    setShowMove(true);
+                                  }}
+                                />
+                                {item.note && item.note.trim().length > 0 ? (
+                                  <IconButton
+                                    icon="information-outline"
+                                    size={16}
+                                    onPress={() => {
+                                      setNoteToShow(item.note as string);
+                                      setShowNote(true);
+                                    }}
+                                  />
+                                ) : null}
+                              </View>
+                            )}
+                          />
+                          <Card.Content>
+                            <ScrollView
+                              horizontal
+                              showsHorizontalScrollIndicator={false}
+                            >
+                              <View style={styles.checkboxRow}>
+                                {categories.map((c) => (
+                                  <Pressable
+                                    key={c.id}
+                                    style={styles.checkboxItem}
+                                    onPress={() => toggleCheck(item.id, c.id)}
+                                    hitSlop={8}
+                                  >
+                                    <Checkbox
+                                      status={
+                                        item.checks[c.id]
+                                          ? "checked"
+                                          : "unchecked"
+                                      }
+                                      onPress={() => toggleCheck(item.id, c.id)}
+                                    />
+                                    <Text style={styles.checkboxLabel}>
+                                      {c.name}
+                                    </Text>
+                                  </Pressable>
+                                ))}
+                              </View>
+                            </ScrollView>
+                            <ProgressBar
+                              progress={progT}
+                              style={styles.progressSmall}
+                            />
+                            {(() => {
+                              const repasadoCat = categories.find(
+                                (c) =>
+                                  c.id === "repasado" ||
+                                  c.name.toLowerCase() === "repasado"
+                              );
+                              const showReview = repasadoCat
+                                ? !!item.checks[repasadoCat.id]
+                                : false;
+                              if (!showReview) return null;
+                              return (
+                                <View style={styles.reviewRow}>
+                                  <Text style={styles.reviewLabel}>
+                                    Repasos
+                                  </Text>
+                                  <IconButton
+                                    icon="minus-circle-outline"
+                                    size={18}
+                                    onPress={() => decrementReview(item.id)}
+                                    disabled={(item.reviewCount ?? 0) <= 0}
+                                  />
+                                  <Text style={styles.reviewCountText}>
+                                    {item.reviewCount ?? 0}
+                                  </Text>
+                                  <IconButton
+                                    icon="plus-circle-outline"
+                                    size={18}
+                                    onPress={() => incrementReview(item.id)}
+                                  />
+                                </View>
+                              );
+                            })()}
+                          </Card.Content>
+                        </Card>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              );
+            })()}
+          </>
+        )}
+      </ScrollView>
 
       <Portal>
         <Dialog visible={showAdd} onDismiss={() => setShowAdd(false)}>
@@ -250,6 +504,120 @@ export default function TableScreen() {
             </Button>
           </Dialog.Actions>
         </Dialog>
+
+        <Dialog
+          visible={showAddFolder}
+          onDismiss={() => setShowAddFolder(false)}
+        >
+          <Dialog.Title>Nueva carpeta</Dialog.Title>
+          <Dialog.Content>
+            <PaperInput
+              mode="outlined"
+              placeholder="Nombre de la carpeta"
+              value={newFolderName}
+              onChangeText={setNewFolderName}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                const n = newFolderName.trim();
+                if (n) {
+                  addFolder(n);
+                  setNewFolderName("");
+                  setShowAddFolder(false);
+                }
+              }}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowAddFolder(false)}>Cancelar</Button>
+            <Button
+              onPress={() => {
+                const n = newFolderName.trim();
+                if (n) {
+                  addFolder(n);
+                  setNewFolderName("");
+                  setShowAddFolder(false);
+                }
+              }}
+              disabled={!newFolderName.trim()}
+            >
+              Crear
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog
+          visible={showRenameFolder}
+          onDismiss={() => setShowRenameFolder(false)}
+        >
+          <Dialog.Title>Renombrar carpeta</Dialog.Title>
+          <Dialog.Content>
+            <PaperInput
+              mode="outlined"
+              placeholder="Nombre de la carpeta"
+              value={renameFolderName}
+              onChangeText={setRenameFolderName}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                const n = renameFolderName.trim();
+                if (n && renameFolderId) {
+                  renameFolder(renameFolderId, n);
+                  setShowRenameFolder(false);
+                }
+              }}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowRenameFolder(false)}>Cancelar</Button>
+            <Button
+              onPress={() => {
+                const n = renameFolderName.trim();
+                if (n && renameFolderId) {
+                  renameFolder(renameFolderId, n);
+                  setShowRenameFolder(false);
+                }
+              }}
+              disabled={!renameFolderName.trim()}
+            >
+              Guardar
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={showMove} onDismiss={() => setShowMove(false)}>
+          <Dialog.Title>Mover a carpeta</Dialog.Title>
+          <Dialog.Content>
+            <View style={{ gap: 8 }}>
+              <Button
+                mode="outlined"
+                icon="folder-remove-outline"
+                onPress={() => {
+                  if (movingTopicId)
+                    moveTopicToFolder(movingTopicId, undefined);
+                  setShowMove(false);
+                }}
+              >
+                Sin carpeta
+              </Button>
+              {folders.map((f) => (
+                <Button
+                  key={f.id}
+                  mode="contained-tonal"
+                  icon="folder-outline"
+                  onPress={() => {
+                    if (movingTopicId) moveTopicToFolder(movingTopicId, f.id);
+                    setShowMove(false);
+                  }}
+                >
+                  {f.name}
+                </Button>
+              ))}
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowMove(false)}>Cerrar</Button>
+          </Dialog.Actions>
+        </Dialog>
+
         <Dialog visible={showNote} onDismiss={() => setShowNote(false)}>
           <Dialog.Title>Nota</Dialog.Title>
           <Dialog.Content>
@@ -278,10 +646,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "space-between",
     marginTop: 6,
   },
-  actionBtn: { marginRight: 8, marginBottom: 6 },
+  folderSection: { marginTop: 12 },
+  folderHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  folderTitle: { fontSize: 16, fontWeight: "700" },
+  folderMeta: { color: "#666" },
+  folderGlobalTitle: { fontWeight: "700", marginTop: 6, marginBottom: 2 },
+  folderProgress: { marginBottom: 10 },
+  folderProgressRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  folderPercent: {
+    width: 40,
+    textAlign: "right",
+    color: "#444",
+    fontWeight: "600",
+  },
+  actionBtn: { maxWidth: "100%", marginBottom: 8 },
   chips: { paddingVertical: 6 },
   chip: { marginRight: 6 },
 

@@ -15,11 +15,18 @@ export type Topic = {
   note?: string;
   updatedAt?: number;
   reviewCount: number;
+  folderId?: string;
+};
+
+export type Folder = {
+  id: string;
+  name: string;
 };
 
 export type StoreState = {
   categories: Category[];
   topics: Topic[];
+  folders: Folder[];
   selectedOpposition?: string;
   hasHydrated: boolean;
   addCategory: (name: string) => void;
@@ -36,6 +43,10 @@ export type StoreState = {
   setTopicNote: (topicId: string, note: string) => void;
   incrementReview: (topicId: string) => void;
   decrementReview: (topicId: string) => void;
+  addFolder: (name: string) => void;
+  renameFolder: (folderId: string, name: string) => void;
+  removeFolder: (folderId: string) => void;
+  moveTopicToFolder: (topicId: string, folderId?: string) => void;
   resetAll: () => void;
 };
 
@@ -68,6 +79,7 @@ export const useStore = create<StoreState>()(
       categories: DEFAULT_CATEGORIES,
       selectedOpposition: undefined,
       topics: [],
+      folders: [],
       hasHydrated: false,
 
       setOpposition: (name) => {
@@ -144,6 +156,7 @@ export const useStore = create<StoreState>()(
           checks,
           updatedAt: Date.now(),
           reviewCount: 0,
+          folderId: undefined,
         };
         set({ topics: [...get().topics, topic] });
       },
@@ -162,6 +175,7 @@ export const useStore = create<StoreState>()(
             checks: Object.fromEntries(categories.map((c) => [c.id, false])),
             updatedAt: now,
             reviewCount: 0,
+            folderId: undefined,
           }));
         if (newTopics.length === 0) return;
         set({ topics: [...get().topics, ...newTopics] });
@@ -232,9 +246,46 @@ export const useStore = create<StoreState>()(
         set({ topics });
       },
 
+      addFolder: (name) => {
+        const clean = name.trim();
+        if (!clean) return;
+        const id = `f_${Date.now()}`;
+        const folder: Folder = { id, name: clean };
+        set({ folders: [...get().folders, folder] });
+      },
+
+      renameFolder: (folderId, name) => {
+        const clean = name.trim();
+        if (!clean) return;
+        const folders = get().folders.map((f) =>
+          f.id === folderId ? { ...f, name: clean } : f
+        );
+        set({ folders });
+      },
+
+      removeFolder: (folderId) => {
+        const folders = get().folders.filter((f) => f.id !== folderId);
+        const topics = get().topics.map((t) =>
+          t.folderId === folderId ? { ...t, folderId: undefined } : t
+        );
+        set({ folders, topics });
+      },
+
+      moveTopicToFolder: (topicId, folderId) => {
+        const topics = get().topics.map((t) =>
+          t.id === topicId ? { ...t, folderId } : t
+        );
+        set({ topics });
+      },
+
       resetAll: () => {
         const categories = DEFAULT_CATEGORIES;
-        set({ categories, topics: [], selectedOpposition: undefined });
+        set({
+          categories,
+          topics: [],
+          folders: [],
+          selectedOpposition: undefined,
+        });
       },
     }),
     {
@@ -243,6 +294,7 @@ export const useStore = create<StoreState>()(
       partialize: (state) => ({
         categories: state.categories,
         topics: state.topics,
+        folders: state.folders,
         selectedOpposition: state.selectedOpposition,
       }),
       onRehydrateStorage: () => () => {
