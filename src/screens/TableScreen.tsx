@@ -55,14 +55,6 @@ export default function TableScreen() {
   const [noteToShow, setNoteToShow] = useState("");
   const [showAddFolder, setShowAddFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
-  const [showRenameFolder, setShowRenameFolder] = useState(false);
-  const [renameFolderName, setRenameFolderName] = useState("");
-  const [renameFolderId, setRenameFolderId] = useState<string | undefined>(
-    undefined
-  );
-  const [folderMenuOpenId, setFolderMenuOpenId] = useState<string | undefined>(
-    undefined
-  );
   const [showMove, setShowMove] = useState(false);
   const [movingTopicId, setMovingTopicId] = useState<string | undefined>(
     undefined
@@ -82,6 +74,37 @@ export default function TableScreen() {
     }).start();
   }, [fade]);
 
+  const categoryProgress = (topicsSubset: typeof topics) => {
+    const totals: Record<string, { done: number; total: number }> = {};
+    categories.forEach(
+      (c) => (totals[c.id] = { done: 0, total: topicsSubset.length })
+    );
+    topicsSubset.forEach((t) => {
+      categories.forEach((c) => {
+        if (t.checks[c.id]) totals[c.id].done += 1;
+      });
+    });
+    const result: Record<string, number> = {};
+    categories.forEach((c) => {
+      const { done, total } = totals[c.id];
+      result[c.id] = total > 0 ? done / total : 0;
+    });
+    return result;
+  };
+
+  const categoryColors = [
+    "#2563eb",
+    "#16a34a",
+    "#f59e0b",
+    "#ef4444",
+    "#8b5cf6",
+    "#06b6d4",
+    "#f472b6",
+    "#84cc16",
+    "#a855f7",
+    "#fb923c",
+  ];
+
   return (
     <Animated.View style={[styles.container, { opacity: fade }]}>
       <Card mode="elevated" style={styles.card}>
@@ -92,6 +115,26 @@ export default function TableScreen() {
             animatedValue={undefined}
             style={styles.progress}
           />
+          <View style={styles.catBarsContainer}>
+            {(() => {
+              const perCat = categoryProgress(topics);
+              return categories.map((c, idx) => (
+                <View key={c.id} style={styles.catItem}>
+                  <View style={styles.catHeaderRow}>
+                    <Text style={styles.catName}>{c.name}</Text>
+                    <Text style={styles.catPercent}>{`${Math.round(
+                      (perCat[c.id] ?? 0) * 100
+                    )}%`}</Text>
+                  </View>
+                  <ProgressBar
+                    progress={perCat[c.id] ?? 0}
+                    color={categoryColors[idx % categoryColors.length]}
+                    style={[styles.catBarProgressFull, styles.catBarTrack]}
+                  />
+                </View>
+              ));
+            })()}
+          </View>
           <View style={styles.actionsRow}>
             <Button
               mode="text"
@@ -170,174 +213,65 @@ export default function TableScreen() {
           <>
             {folders.map((f) => {
               const sectionTopics = topics.filter((t) => t.folderId === f.id);
-              if (sectionTopics.length === 0) return null;
               const prog = globalProgress(sectionTopics, categories);
-              const { done, total } = folderTotals(sectionTopics, categories);
               return (
-                <View key={f.id} style={styles.folderSection}>
-                  <View style={styles.folderHeader}>
-                    <Text style={styles.folderTitle}>{f.name}</Text>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      <Menu
-                        visible={folderMenuOpenId === f.id}
-                        onDismiss={() => setFolderMenuOpenId(undefined)}
-                        anchor={
+                <View
+                  key={f.id}
+                  style={[styles.folderSection, styles.folderSectionBg]}
+                >
+                  <TouchableOpacity
+                    onPress={() =>
+                      navigation.navigate("Carpeta", { folderId: f.id })
+                    }
+                    activeOpacity={0.7}
+                  >
+                    <Card mode="outlined" style={styles.folderCard}>
+                      <Card.Content>
+                        <View style={styles.folderHeaderRow}>
                           <IconButton
-                            icon="dots-vertical"
+                            icon="folder-outline"
                             size={18}
-                            onPress={() => setFolderMenuOpenId(f.id)}
+                            disabled
                           />
-                        }
-                      >
-                        <Menu.Item
-                          onPress={() => {
-                            setFolderMenuOpenId(undefined);
-                            setRenameFolderId(f.id);
-                            setRenameFolderName(f.name);
-                            setShowRenameFolder(true);
-                          }}
-                          title="Renombrar"
-                          leadingIcon="pencil-outline"
+                          <Text style={styles.folderTitle}>{f.name}</Text>
+                        </View>
+                        <Text
+                          style={styles.folderGlobalTitle}
+                        >{`Progreso ${Math.round(prog * 100)}%`}</Text>
+                        <ProgressBar
+                          progress={prog}
+                          style={styles.progressFolder}
                         />
-                        <Menu.Item
-                          onPress={() => {
-                            setFolderMenuOpenId(undefined);
-                            Alert.alert(
-                              "Eliminar carpeta",
-                              "Los temas no se borrarán, solo quedarán sin carpeta. ¿Eliminar?",
-                              [
-                                { text: "Cancelar", style: "cancel" },
-                                {
-                                  text: "Eliminar",
-                                  style: "destructive",
-                                  onPress: () => removeFolder(f.id),
-                                },
-                              ]
-                            );
-                          }}
-                          title="Eliminar"
-                          leadingIcon="delete-outline"
-                        />
-                      </Menu>
-                    </View>
-                  </View>
-                  <Text
-                    style={styles.folderGlobalTitle}
-                  >{`Progreso ${Math.round(prog * 100)}%`}</Text>
-                  <ProgressBar
-                    progress={prog}
-                    style={[styles.progress, styles.folderProgress]}
-                  />
-                  {sectionTopics.map((item) => {
-                    const progT = topicProgress(item, categories.length);
-                    return (
-                      <TouchableOpacity
-                        key={item.id}
-                        onPress={() =>
-                          navigation.navigate("Tema", { topicId: item.id })
-                        }
-                      >
-                        <Card mode="outlined" style={styles.rowCard}>
-                          <Card.Title
-                            title={item.title}
-                            right={() => (
-                              <View style={styles.rightIcons}>
-                                <IconButton
-                                  icon="folder-move-outline"
-                                  size={18}
-                                  onPress={() => {
-                                    setMovingTopicId(item.id);
-                                    setShowMove(true);
-                                  }}
-                                />
-                                {item.note && item.note.trim().length > 0 ? (
-                                  <IconButton
-                                    icon="information-outline"
-                                    size={16}
-                                    onPress={() => {
-                                      setNoteToShow(item.note as string);
-                                      setShowNote(true);
-                                    }}
-                                  />
-                                ) : null}
-                              </View>
-                            )}
-                          />
-                          <Card.Content>
-                            <ScrollView
-                              horizontal
-                              showsHorizontalScrollIndicator={false}
-                            >
-                              <View style={styles.checkboxRow}>
-                                {categories.map((c) => (
-                                  <Pressable
-                                    key={c.id}
-                                    style={styles.checkboxItem}
-                                    onPress={() => toggleCheck(item.id, c.id)}
-                                    hitSlop={8}
-                                  >
-                                    <Checkbox
-                                      status={
-                                        item.checks[c.id]
-                                          ? "checked"
-                                          : "unchecked"
-                                      }
-                                      onPress={() => toggleCheck(item.id, c.id)}
-                                    />
-                                    <Text style={styles.checkboxLabel}>
-                                      {c.name}
-                                    </Text>
-                                  </Pressable>
-                                ))}
-                              </View>
-                            </ScrollView>
-                            <ProgressBar
-                              progress={progT}
-                              style={styles.progressSmall}
-                            />
-                            {(() => {
-                              const repasadoCat = categories.find(
-                                (c) =>
-                                  c.id === "repasado" ||
-                                  c.name.toLowerCase() === "repasado"
-                              );
-                              const showReview = repasadoCat
-                                ? !!item.checks[repasadoCat.id]
-                                : false;
-                              if (!showReview) return null;
-                              return (
-                                <View style={styles.reviewRow}>
-                                  <Text style={styles.reviewLabel}>
-                                    Repasos
-                                  </Text>
-                                  <IconButton
-                                    icon="minus-circle-outline"
-                                    size={18}
-                                    onPress={() => decrementReview(item.id)}
-                                    disabled={(item.reviewCount ?? 0) <= 0}
-                                  />
-                                  <Text style={styles.reviewCountText}>
-                                    {item.reviewCount ?? 0}
-                                  </Text>
-                                  <IconButton
-                                    icon="plus-circle-outline"
-                                    size={18}
-                                    onPress={() => incrementReview(item.id)}
-                                  />
+                        <View style={styles.catBarsContainerFolder}>
+                          {(() => {
+                            const perCat = categoryProgress(sectionTopics);
+                            return categories.map((c, idx) => (
+                              <View key={c.id} style={styles.catItem}>
+                                <View style={styles.catHeaderRow}>
+                                  <Text style={styles.catName}>{c.name}</Text>
+                                  <Text
+                                    style={styles.catPercent}
+                                  >{`${Math.round(
+                                    (perCat[c.id] ?? 0) * 100
+                                  )}%`}</Text>
                                 </View>
-                              );
-                            })()}
-                          </Card.Content>
-                        </Card>
-                      </TouchableOpacity>
-                    );
-                  })}
+                                <ProgressBar
+                                  progress={perCat[c.id] ?? 0}
+                                  color={
+                                    categoryColors[idx % categoryColors.length]
+                                  }
+                                  style={[
+                                    styles.catBarProgressFull,
+                                    styles.catBarTrack,
+                                  ]}
+                                />
+                              </View>
+                            ));
+                          })()}
+                        </View>
+                      </Card.Content>
+                    </Card>
+                  </TouchableOpacity>
                 </View>
               );
             })}
@@ -345,17 +279,17 @@ export default function TableScreen() {
             {(() => {
               const sectionTopics = topics.filter((t) => !t.folderId);
               if (sectionTopics.length === 0) return null;
-              const prog = folderProgress(sectionTopics, categories, undefined);
+              const prog = globalProgress(sectionTopics, categories);
               const { done, total } = folderTotals(
                 sectionTopics,
                 categories,
                 undefined
               );
               return (
-                <View key="__none__" style={styles.folderSection}>
-                  <View style={styles.folderHeader}>
-                    <Text style={styles.folderTitle}>Sin carpeta</Text>
-                  </View>
+                <View
+                  key="__none__"
+                  style={[styles.folderSection, styles.noFolderSectionBg]}
+                >
                   {sectionTopics.map((item) => {
                     const progT = topicProgress(item, categories.length);
                     return (
@@ -545,44 +479,6 @@ export default function TableScreen() {
           </Dialog.Actions>
         </Dialog>
 
-        <Dialog
-          visible={showRenameFolder}
-          onDismiss={() => setShowRenameFolder(false)}
-        >
-          <Dialog.Title>Renombrar carpeta</Dialog.Title>
-          <Dialog.Content>
-            <PaperInput
-              mode="outlined"
-              placeholder="Nombre de la carpeta"
-              value={renameFolderName}
-              onChangeText={setRenameFolderName}
-              returnKeyType="done"
-              onSubmitEditing={() => {
-                const n = renameFolderName.trim();
-                if (n && renameFolderId) {
-                  renameFolder(renameFolderId, n);
-                  setShowRenameFolder(false);
-                }
-              }}
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setShowRenameFolder(false)}>Cancelar</Button>
-            <Button
-              onPress={() => {
-                const n = renameFolderName.trim();
-                if (n && renameFolderId) {
-                  renameFolder(renameFolderId, n);
-                  setShowRenameFolder(false);
-                }
-              }}
-              disabled={!renameFolderName.trim()}
-            >
-              Guardar
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-
         <Dialog visible={showMove} onDismiss={() => setShowMove(false)}>
           <Dialog.Title>Mover a carpeta</Dialog.Title>
           <Dialog.Content>
@@ -638,6 +534,18 @@ const styles = StyleSheet.create({
   card: { marginBottom: 12 },
   progress: { height: 10, borderRadius: 8 },
   progressSmall: { height: 8, borderRadius: 8, marginTop: 8 },
+  catBarsContainer: { marginTop: 10 },
+  catBarsContainerFolder: { marginTop: 10 },
+  catItem: { marginTop: 8 },
+  catHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  catName: { color: "#111", fontWeight: "500" },
+  catPercent: { color: "#444", fontWeight: "600" },
+  catBarProgressFull: { height: 8, borderRadius: 6, marginTop: 6 },
+  catBarTrack: { backgroundColor: "#e5e7eb" },
   reviewRow: { flexDirection: "row", alignItems: "center", marginTop: 6 },
   reviewLabel: { color: "#555", marginRight: 6 },
   reviewCountText: { minWidth: 24, textAlign: "center", fontWeight: "600" },
@@ -650,6 +558,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   folderSection: { marginTop: 12 },
+  folderSectionBg: { backgroundColor: "#f8fafc", padding: 8, borderRadius: 10 },
+  noFolderSectionBg: {
+    backgroundColor: "#f6f6f6",
+    padding: 8,
+    borderRadius: 10,
+  },
   folderHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -658,7 +572,12 @@ const styles = StyleSheet.create({
   },
   folderTitle: { fontSize: 16, fontWeight: "700" },
   folderMeta: { color: "#666" },
-  folderGlobalTitle: { fontWeight: "700", marginTop: 6, marginBottom: 2 },
+  folderGlobalTitle: {
+    fontWeight: "700",
+    marginTop: 6,
+    marginBottom: 10,
+    marginLeft: 1,
+  },
   folderProgress: { marginBottom: 10 },
   folderProgressRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   folderPercent: {
@@ -667,6 +586,9 @@ const styles = StyleSheet.create({
     color: "#444",
     fontWeight: "600",
   },
+  folderCard: { marginBottom: 6 },
+  folderHeaderRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  progressFolder: { height: 10, borderRadius: 8 },
   actionBtn: { maxWidth: "100%", marginBottom: 8 },
   chips: { paddingVertical: 6 },
   chip: { marginRight: 6 },
