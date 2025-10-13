@@ -9,6 +9,8 @@ import {
   Text,
   ActivityIndicator,
   Divider,
+  Card,
+  IconButton,
 } from "react-native-paper";
 import { View, ScrollView } from "react-native";
 import TableScreen from "./src/screens/TableScreen";
@@ -16,11 +18,13 @@ import CategoriesScreen from "./src/screens/CategoriesScreen";
 import TopicDetailScreen from "./src/screens/TopicDetailScreen";
 import { useStore } from "./src/store/useStore";
 import { TOPIC_TITLES } from "./src/data/titles";
+import FolderScreen from "./src/screens/FolderScreen";
 
 type RootStackParamList = {
   Dashboard: undefined;
   Categorías: undefined;
   Tema: { topicId: string };
+  Carpeta: { folderId?: string };
   "Selecciona oposición": undefined;
 };
 export type { RootStackParamList };
@@ -47,16 +51,36 @@ function OppositionSelectScreen({ navigation }: any) {
         <Divider style={{ marginBottom: 12 }} />
         <View style={{ gap: 10 }}>
           {options.map((name) => (
-            <Button
+            <Card
               key={name}
-              mode="contained-tonal"
-              icon="school-outline"
+              mode="elevated"
               onPress={() => handleSelect(name)}
-              contentStyle={{ paddingVertical: 6 }}
-              style={{ borderRadius: 10 }}
+              style={{ borderRadius: 12 }}
             >
-              {name}
-            </Button>
+              <Card.Content>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 10,
+                  }}
+                >
+                  <IconButton
+                    icon="school-outline"
+                    size={22}
+                    disabled
+                    style={{ margin: 0, padding: 0 }}
+                  />
+                  <Text
+                    variant="titleMedium"
+                    style={{ flex: 1, flexWrap: "wrap" }}
+                  >
+                    {name}
+                  </Text>
+                </View>
+              </Card.Content>
+            </Card>
           ))}
         </View>
       </ScrollView>
@@ -117,6 +141,7 @@ export default function App() {
               <Stack.Screen name="Dashboard" component={TableScreen} />
               <Stack.Screen name="Categorías" component={CategoriesScreen} />
               <Stack.Screen name="Tema" component={TopicDetailScreen} />
+              <Stack.Screen name="Carpeta" component={FolderScreen} />
             </Stack.Navigator>
           </SafeAreaView>
         </NavigationContainer>
