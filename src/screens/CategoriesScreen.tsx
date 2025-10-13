@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -9,21 +9,50 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  Alert,
 } from "react-native";
 import { IconButton } from "react-native-paper";
 import { useStore } from "../store/useStore";
+import { getEffectiveCategories } from "../store/useStore";
+import { useRoute } from "@react-navigation/native";
 
 export default function CategoriesScreen() {
+  const route = useRoute<any>();
+  const { folderId } = (route.params ?? {}) as { folderId?: string };
   const {
     categories,
     addCategory,
     removeCategory,
     renameCategory,
-    moveCategory,
+    folderCategories,
+    addFolderCategory,
+    removeFolderCategory,
+    renameFolderCategory,
+    folderCategoryOrder,
+    moveFolderEffective,
+    hideGlobalInFolder,
+    unhideGlobalInFolder,
+    folderHiddenGlobals,
   } = useStore();
   const [newCat, setNewCat] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+
+  const effective = useMemo(
+    () =>
+      folderId
+        ? getEffectiveCategories(
+            categories,
+            folderCategories[folderId] ?? [],
+            folderCategoryOrder[folderId] ?? []
+          )
+        : categories,
+    [categories, folderCategories, folderCategoryOrder, folderId]
+  );
+  const folderList = useMemo(
+    () => (folderId ? folderCategories[folderId] ?? [] : []),
+    [folderCategories, folderId]
+  );
 
   useEffect(() => {
     if (
@@ -40,94 +69,185 @@ export default function CategoriesScreen() {
   return (
     <View style={styles.container}>
       <FlatList
-        data={categories}
+        data={effective}
         keyExtractor={(c) => c.id}
-        renderItem={({ item, index }) => (
-          <View style={styles.row}>
-            {editing === item.id ? (
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                value={editingName}
-                onChangeText={setEditingName}
-                onSubmitEditing={() => {
-                  const name = editingName.trim();
-                  if (name) {
-                    animate();
-                    renameCategory(item.id, name);
-                  }
-                  setEditing(null);
-                }}
-                autoFocus
-                returnKeyType="done"
-              />
-            ) : (
-              <Text style={styles.name}>{item.name}</Text>
-            )}
-
-            {editing === item.id ? (
-              <>
-                <IconButton
-                  icon="content-save"
-                  onPress={() => {
+        renderItem={({ item, index }) => {
+          const isFolderCat = folderId
+            ? item.id.startsWith(`fcat_${folderId}_`)
+            : false;
+          const hiddenList = folderId
+            ? folderHiddenGlobals[folderId] ?? []
+            : [];
+          const isHiddenGlobal =
+            !!folderId && !isFolderCat && hiddenList.includes(item.id);
+          const totalGlobal = categories.length;
+          const moveUp = () => {
+            animate();
+            folderId &&
+              moveFolderEffective(folderId, item.id, Math.max(0, index - 1));
+          };
+          const moveDown = () => {
+            animate();
+            folderId &&
+              moveFolderEffective(
+                folderId,
+                item.id,
+                Math.min(effective.length - 1, index + 1)
+              );
+          };
+          return (
+            <View style={styles.row}>
+              {editing === item.id ? (
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  value={editingName}
+                  onChangeText={setEditingName}
+                  onSubmitEditing={() => {
                     const name = editingName.trim();
                     if (name) {
                       animate();
-                      renameCategory(item.id, name);
+                      if (isFolderCat && folderId)
+                        renameFolderCategory(folderId, item.id, name);
+                      else renameCategory(item.id, name);
                     }
                     setEditing(null);
                   }}
+                  autoFocus
+                  returnKeyType="done"
                 />
-                <IconButton icon="close" onPress={() => setEditing(null)} />
-              </>
-            ) : (
-              <>
-                <IconButton
-                  icon="pencil"
-                  onPress={() => {
-                    setEditing(item.id);
-                    setEditingName(item.name);
-                  }}
-                />
-                <IconButton
-                  icon="arrow-up"
-                  disabled={index === 0}
-                  onPress={() => {
-                    animate();
-                    moveCategory(item.id, Math.max(0, index - 1));
-                  }}
-                />
-                <IconButton
-                  icon="arrow-down"
-                  disabled={index === categories.length - 1}
-                  onPress={() => {
-                    animate();
-                    moveCategory(item.id, index + 1);
-                  }}
-                />
-                <IconButton
-                  icon="delete"
-                  iconColor="#ef4444"
-                  onPress={() => {
-                    animate();
-                    removeCategory(item.id);
-                  }}
-                />
-              </>
-            )}
-          </View>
-        )}
+              ) : (
+                <Text
+                  style={[styles.name, isHiddenGlobal && { color: "#aaa" }]}
+                >
+                  {item.name}
+                </Text>
+              )}
+
+              {editing === item.id ? (
+                <>
+                  <IconButton
+                    icon="content-save"
+                    onPress={() => {
+                      const name = editingName.trim();
+                      if (name) {
+                        animate();
+                        if (isFolderCat && folderId)
+                          renameFolderCategory(folderId, item.id, name);
+                        else renameCategory(item.id, name);
+                      }
+                      setEditing(null);
+                    }}
+                  />
+                  <IconButton icon="close" onPress={() => setEditing(null)} />
+                </>
+              ) : (
+                <>
+                  <IconButton
+                    icon="pencil"
+                    disabled={isHiddenGlobal}
+                    onPress={() => {
+                      if (isHiddenGlobal) return;
+                      setEditing(item.id);
+                      setEditingName(item.name);
+                    }}
+                  />
+                  <IconButton
+                    icon="arrow-up"
+                    disabled={index === 0 || isHiddenGlobal}
+                    onPress={moveUp}
+                  />
+                  <IconButton
+                    icon="arrow-down"
+                    disabled={index === effective.length - 1 || isHiddenGlobal}
+                    onPress={moveDown}
+                  />
+                  {isHiddenGlobal ? (
+                    <IconButton
+                      icon="eye"
+                      onPress={() =>
+                        folderId && unhideGlobalInFolder(folderId, item.id)
+                      }
+                    />
+                  ) : folderId && !isFolderCat ? (
+                    <IconButton
+                      icon="eye-off"
+                      onPress={() => {
+                        const name = item.name;
+                        Alert.alert(
+                          "Ocultar categoría",
+                          `Esta categoría global se ocultará solo en esta carpeta: "${name}". ¿Confirmar?`,
+                          [
+                            { text: "Cancelar", style: "cancel" },
+                            {
+                              text: "Ocultar",
+                              style: "destructive",
+                              onPress: () =>
+                                hideGlobalInFolder(folderId, item.id),
+                            },
+                          ]
+                        );
+                      }}
+                    />
+                  ) : (
+                    <IconButton
+                      icon="delete"
+                      iconColor="#ef4444"
+                      onPress={() => {
+                        const name = item.name;
+                        if (folderId) {
+                          Alert.alert(
+                            "Eliminar categoría",
+                            `Se eliminará de esta carpeta: "${name}". ¿Confirmar?`,
+                            [
+                              { text: "Cancelar", style: "cancel" },
+                              {
+                                text: "Eliminar",
+                                style: "destructive",
+                                onPress: () =>
+                                  removeFolderCategory(
+                                    folderId as string,
+                                    item.id
+                                  ),
+                              },
+                            ]
+                          );
+                        } else {
+                          Alert.alert(
+                            "Eliminar categoría",
+                            `Esta categoría se eliminará globalmente: "${name}". ¿Confirmar?`,
+                            [
+                              { text: "Cancelar", style: "cancel" },
+                              {
+                                text: "Eliminar",
+                                style: "destructive",
+                                onPress: () => removeCategory(item.id),
+                              },
+                            ]
+                          );
+                        }
+                      }}
+                    />
+                  )}
+                </>
+              )}
+            </View>
+          );
+        }}
         ItemSeparatorComponent={() => <View style={styles.sep} />}
       />
 
       <View style={styles.addRow}>
         <TextInput
           style={[styles.input, { flex: 1 }]}
-          placeholder="Nueva categoría..."
+          placeholder={
+            folderId ? "Nueva categoría de la carpeta..." : "Nueva categoría..."
+          }
           value={newCat}
           onChangeText={setNewCat}
           onSubmitEditing={() => {
             if (newCat.trim()) {
-              addCategory(newCat);
+              if (folderId) addFolderCategory(folderId, newCat);
+              else addCategory(newCat);
               setNewCat("");
             }
           }}
@@ -137,7 +257,8 @@ export default function CategoriesScreen() {
           style={[styles.addBtn, !newCat.trim() && styles.addBtnDisabled]}
           onPress={() => {
             if (newCat.trim()) {
-              addCategory(newCat);
+              if (folderId) addFolderCategory(folderId, newCat);
+              else addCategory(newCat);
               setNewCat("");
             }
           }}

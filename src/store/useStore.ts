@@ -27,6 +27,9 @@ export type StoreState = {
   categories: Category[];
   topics: Topic[];
   folders: Folder[];
+  folderCategories: Record<string, Category[]>; // folderId -> categories
+  folderCategoryOrder: Record<string, string[]>; // folderId -> ordered list of effective category ids (global+local)
+  folderHiddenGlobals: Record<string, string[]>; // folderId -> list of global category ids hidden in this folder
   selectedOpposition?: string;
   hasHydrated: boolean;
   addCategory: (name: string) => void;
@@ -34,6 +37,26 @@ export type StoreState = {
   renameCategory: (categoryId: string, name: string) => void;
   moveCategory: (categoryId: string, toIndex: number) => void;
   reorderCategories: (orderedIds: string[]) => void;
+  addFolderCategory: (folderId: string, name: string) => void;
+  removeFolderCategory: (folderId: string, categoryId: string) => void;
+  renameFolderCategory: (
+    folderId: string,
+    categoryId: string,
+    name: string
+  ) => void;
+  moveFolderCategory: (
+    folderId: string,
+    categoryId: string,
+    toIndex: number
+  ) => void; // local-only reorder
+  // Folder view mixed-order actions
+  moveFolderEffective: (
+    folderId: string,
+    categoryId: string,
+    toIndex: number
+  ) => void; // reorder overlay across globals+locals
+  hideGlobalInFolder: (folderId: string, categoryId: string) => void;
+  unhideGlobalInFolder: (folderId: string, categoryId: string) => void;
   setOpposition: (name: string) => void;
   addTopic: (title: string) => void;
   bulkAddTopics: (titles: string[]) => void;
@@ -80,6 +103,9 @@ export const useStore = create<StoreState>()(
       selectedOpposition: undefined,
       topics: [],
       folders: [],
+      folderCategories: {},
+      folderCategoryOrder: {},
+      folderHiddenGlobals: {},
       hasHydrated: false,
 
       setOpposition: (name) => {
@@ -90,7 +116,94 @@ export const useStore = create<StoreState>()(
         set({ selectedOpposition: clean, topics });
       },
 
+      // Folder-specific categories CRUD
+      addFolderCategory: (folderId, name) => {
+        const clean = name.trim();
+        if (!clean) return;
+        const id = makeFolderCategoryId(folderId, clean);
+        const map = get().folderCategories;
+        const existing = (map[folderId] ?? []).some((c) => c.id === id);
+        if (existing) return;
+        const newCat: Category = { id, name: clean };
+        const next = { ...map, [folderId]: [...(map[folderId] ?? []), newCat] };
+        // Append to per-folder order overlay at the end
+        const orderMap = { ...get().folderCategoryOrder };
+        orderMap[folderId] = [...(orderMap[folderId] ?? []), id];
+        // Add check key for topics currently in this folder
+        const topics = get().topics.map((t) =>
+          t.folderId === folderId
+            ? { ...t, checks: { ...t.checks, [id]: false } }
+            : t
+        );
+        set({ folderCategories: next, folderCategoryOrder: orderMap, topics });
+      },
+
+      removeFolderCategory: (folderId, categoryId) => {
+        const map = get().folderCategories;
+        const list = (map[folderId] ?? []).filter((c) => c.id !== categoryId);
+        const next = { ...map, [folderId]: list };
+        // Remove from per-folder ordering as well
+        const orderMap = { ...get().folderCategoryOrder };
+        orderMap[folderId] = (orderMap[folderId] ?? []).filter(
+          (id) => id !== categoryId
+        );
+        // Remove check key from topics in this folder
+        const topics = get().topics.map((t) => {
+          if (t.folderId !== folderId) return t;
+          const { [categoryId]: _omit, ...rest } = t.checks;
+          return { ...t, checks: rest, updatedAt: Date.now() };
+        });
+        set({ folderCategories: next, folderCategoryOrder: orderMap, topics });
+      },
+
+      renameFolderCategory: (folderId, categoryId, name) => {
+        const clean = name.trim();
+        if (!clean) return;
+        const map = get().folderCategories;
+        const list = (map[folderId] ?? []).map((c) =>
+          c.id === categoryId ? { ...c, name: clean } : c
+        );
+        set({ folderCategories: { ...map, [folderId]: list } });
+      },
+
+      moveFolderCategory: (folderId, categoryId, toIndex) => {
+        const list = [...(get().folderCategories[folderId] ?? [])];
+        const from = list.findIndex((c) => c.id === categoryId);
+        if (from === -1) return;
+        const clampedTo = Math.max(0, Math.min(toIndex, list.length - 1));
+        const [item] = list.splice(from, 1);
+        list.splice(clampedTo, 0, item);
+        set({
+          folderCategories: { ...get().folderCategories, [folderId]: list },
+        });
+      },
+
+      moveFolderEffective: (folderId, categoryId, toIndex) => {
+        const globals = get().categories;
+        const locals = get().folderCategories[folderId] ?? [];
+        const order = get().folderCategoryOrder[folderId] ?? [];
+        const hidden = get().folderHiddenGlobals[folderId] ?? [];
+        const effective = getEffectiveCategories(
+          globals,
+          locals,
+          order,
+          hidden
+        ).map((c) => c.id);
+        const fromIndex = effective.findIndex((id) => id === categoryId);
+        if (fromIndex === -1) return;
+        const clampedTo = Math.max(0, Math.min(toIndex, effective.length - 1));
+        if (fromIndex === clampedTo) return;
+        effective.splice(clampedTo, 0, ...effective.splice(fromIndex, 1));
+        set({
+          folderCategoryOrder: {
+            ...get().folderCategoryOrder,
+            [folderId]: effective,
+          },
+        });
+      },
+
       addCategory: (name) => {
+        // global categories
         const clean = name.trim();
         if (!clean) return;
         const id = clean.toLowerCase().replace(/\s+/g, "-");
@@ -251,7 +364,12 @@ export const useStore = create<StoreState>()(
         if (!clean) return;
         const id = `f_${Date.now()}`;
         const folder: Folder = { id, name: clean };
-        set({ folders: [...get().folders, folder] });
+        set({
+          folders: [...get().folders, folder],
+          folderCategories: { ...get().folderCategories, [id]: [] },
+          folderCategoryOrder: { ...get().folderCategoryOrder, [id]: [] },
+          folderHiddenGlobals: { ...get().folderHiddenGlobals, [id]: [] },
+        });
       },
 
       renameFolder: (folderId, name) => {
@@ -265,16 +383,76 @@ export const useStore = create<StoreState>()(
 
       removeFolder: (folderId) => {
         const folders = get().folders.filter((f) => f.id !== folderId);
-        const topics = get().topics.map((t) =>
-          t.folderId === folderId ? { ...t, folderId: undefined } : t
-        );
-        set({ folders, topics });
+        const topics = get().topics.map((t) => {
+          if (t.folderId !== folderId) return t;
+          // prune checks for folder-specific categories of this folder
+          const prunedChecks = Object.fromEntries(
+            Object.entries(t.checks).filter(
+              ([key]) => !key.startsWith(`fcat_${folderId}_`)
+            )
+          );
+          return { ...t, folderId: undefined, checks: prunedChecks };
+        });
+        const folderCategories = { ...get().folderCategories };
+        delete folderCategories[folderId];
+        const folderCategoryOrder = { ...get().folderCategoryOrder };
+        delete folderCategoryOrder[folderId];
+        const folderHiddenGlobals = { ...get().folderHiddenGlobals };
+        delete folderHiddenGlobals[folderId];
+        set({
+          folders,
+          topics,
+          folderCategories,
+          folderCategoryOrder,
+          folderHiddenGlobals,
+        });
+      },
+
+      hideGlobalInFolder: (folderId, categoryId) => {
+        const globals = get().categories;
+        const isGlobal = globals.some((c) => c.id === categoryId);
+        if (!isGlobal) return;
+        const hidden = get().folderHiddenGlobals[folderId] ?? [];
+        if (hidden.includes(categoryId)) return;
+        const nextHidden = {
+          ...get().folderHiddenGlobals,
+          [folderId]: [...hidden, categoryId],
+        };
+        set({ folderHiddenGlobals: nextHidden });
+      },
+
+      unhideGlobalInFolder: (folderId, categoryId) => {
+        const hidden = get().folderHiddenGlobals[folderId] ?? [];
+        const nextHidden = {
+          ...get().folderHiddenGlobals,
+          [folderId]: hidden.filter((id) => id !== categoryId),
+        };
+        set({ folderHiddenGlobals: nextHidden });
       },
 
       moveTopicToFolder: (topicId, folderId) => {
-        const topics = get().topics.map((t) =>
-          t.id === topicId ? { ...t, folderId } : t
-        );
+        const current = get();
+        const topics = current.topics.map((t) => {
+          if (t.id !== topicId) return t;
+          const prevFolder = t.folderId;
+          let checks = { ...t.checks };
+          // prune old folder-specific checks when leaving a folder
+          if (prevFolder && prevFolder !== folderId) {
+            checks = Object.fromEntries(
+              Object.entries(checks).filter(
+                ([k]) => !k.startsWith(`fcat_${prevFolder}_`)
+              )
+            );
+          }
+          // add missing checks for new folder's categories
+          if (folderId) {
+            const fCats = current.folderCategories[folderId] ?? [];
+            for (const c of fCats) {
+              if (!(c.id in checks)) checks[c.id] = false;
+            }
+          }
+          return { ...t, folderId, checks };
+        });
         set({ topics });
       },
 
@@ -284,6 +462,9 @@ export const useStore = create<StoreState>()(
           categories,
           topics: [],
           folders: [],
+          folderCategories: {},
+          folderCategoryOrder: {},
+          folderHiddenGlobals: {},
           selectedOpposition: undefined,
         });
       },
@@ -295,6 +476,9 @@ export const useStore = create<StoreState>()(
         categories: state.categories,
         topics: state.topics,
         folders: state.folders,
+        folderCategories: state.folderCategories,
+        folderCategoryOrder: state.folderCategoryOrder,
+        folderHiddenGlobals: state.folderHiddenGlobals,
         selectedOpposition: state.selectedOpposition,
       }),
       onRehydrateStorage: () => () => {
@@ -303,3 +487,40 @@ export const useStore = create<StoreState>()(
     }
   )
 );
+
+// Helpers to generate folder category IDs
+export const makeFolderCategoryId = (folderId: string, name: string) => {
+  const slug = name.trim().toLowerCase().replace(/\s+/g, "-");
+  return `fcat_${folderId}_${slug}`;
+};
+
+// Compute ordered effective categories for a folder view
+export const getEffectiveCategories = (
+  globals: Category[],
+  locals: Category[] | undefined,
+  order: string[] | undefined,
+  hiddenGlobals?: string[]
+): Category[] => {
+  const presentMap = new Map<string, Category>();
+  globals.forEach((c) => {
+    if (!hiddenGlobals || !hiddenGlobals.includes(c.id)) {
+      presentMap.set(c.id, c);
+    }
+  });
+  (locals ?? []).forEach((c) => presentMap.set(c.id, c));
+  if (!order || order.length === 0) {
+    return Array.from(presentMap.values());
+  }
+  const ordered: Category[] = [];
+  // Place by order if exists
+  for (const id of order) {
+    const c = presentMap.get(id);
+    if (c) {
+      ordered.push(c);
+      presentMap.delete(id);
+    }
+  }
+  // Append any remaining not in order
+  for (const c of presentMap.values()) ordered.push(c);
+  return ordered;
+};

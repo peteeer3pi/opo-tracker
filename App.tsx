@@ -5,7 +5,6 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import {
   MD3LightTheme,
   PaperProvider,
-  Button,
   Text,
   ActivityIndicator,
   Divider,
@@ -22,7 +21,7 @@ import FolderScreen from "./src/screens/FolderScreen";
 
 type RootStackParamList = {
   Dashboard: undefined;
-  Categorías: undefined;
+  Categorías: { folderId?: string } | undefined;
   Tema: { topicId: string };
   Carpeta: { folderId?: string };
   "Selecciona oposición": undefined;

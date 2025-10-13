@@ -8,13 +8,15 @@ import {
   TouchableOpacity,
   Pressable,
   Alert,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../../App";
 import {
   Button,
-  Chip,
   ProgressBar,
   TextInput as PaperInput,
   Card,
@@ -22,15 +24,11 @@ import {
   Portal,
   Dialog,
   IconButton,
-  Menu,
+  RadioButton,
 } from "react-native-paper";
 import { useStore } from "../store/useStore";
-import {
-  globalProgress,
-  topicProgress,
-  folderProgress,
-  folderTotals,
-} from "../utils/progress";
+import { getEffectiveCategories } from "../store/useStore";
+import { globalProgress, topicProgress, folderTotals } from "../utils/progress";
 
 export default function TableScreen() {
   const navigation =
@@ -39,11 +37,12 @@ export default function TableScreen() {
     topics,
     categories,
     folders,
+    folderCategories,
+    folderCategoryOrder,
+    folderHiddenGlobals,
     toggleCheck,
     addTopic,
     addFolder,
-    renameFolder,
-    removeFolder,
     moveTopicToFolder,
     resetAll,
     incrementReview,
@@ -59,6 +58,25 @@ export default function TableScreen() {
   const [movingTopicId, setMovingTopicId] = useState<string | undefined>(
     undefined
   );
+
+  const [progressFilter, setProgressFilter] = useState<string>("__global__");
+  const [showProgressSelector, setShowProgressSelector] = useState(false);
+
+  const [actionsOpen, setActionsOpen] = useState(true);
+
+  React.useEffect(() => {
+    if (
+      Platform.OS === "android" &&
+      UIManager.setLayoutAnimationEnabledExperimental
+    ) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
+
+  const toggleActions = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setActionsOpen((v) => !v);
+  };
 
   const global = useMemo(
     () => globalProgress(topics, categories),
@@ -110,95 +128,113 @@ export default function TableScreen() {
       <Card mode="elevated" style={styles.card}>
         <Card.Title title={`Progreso global ${(global * 100).toFixed(0)}%`} />
         <Card.Content>
-          <ProgressBar
-            progress={global}
-            animatedValue={undefined}
-            style={styles.progress}
-          />
-          <View style={styles.catBarsContainer}>
-            {(() => {
-              const perCat = categoryProgress(topics);
-              return categories.map((c, idx) => (
-                <View key={c.id} style={styles.catItem}>
-                  <View style={styles.catHeaderRow}>
-                    <Text style={styles.catName}>{c.name}</Text>
-                    <Text style={styles.catPercent}>{`${Math.round(
-                      (perCat[c.id] ?? 0) * 100
-                    )}%`}</Text>
-                  </View>
-                  <ProgressBar
-                    progress={perCat[c.id] ?? 0}
-                    color={categoryColors[idx % categoryColors.length]}
-                    style={[styles.catBarProgressFull, styles.catBarTrack]}
-                  />
-                </View>
-              ));
-            })()}
-          </View>
-          <View style={styles.actionsRow}>
-            <Button
-              mode="text"
-              onPress={() => navigation.navigate("Categorías")}
-              icon="tune"
-              style={styles.actionBtn}
-            >
-              Gestionar categorías
-            </Button>
-            <Button
-              mode="text"
-              icon="plus"
-              onPress={() => setShowAdd(true)}
-              style={styles.actionBtn}
-            >
-              Añadir tema
-            </Button>
-            <Button
-              mode="text"
-              icon="folder-plus-outline"
-              onPress={() => setShowAddFolder(true)}
-              style={styles.actionBtn}
-            >
-              Nueva carpeta
-            </Button>
-            <Button
-              mode="text"
-              icon="backup-restore"
-              onPress={() =>
-                Alert.alert(
-                  "Reiniciar datos",
-                  "Se restaurarán las categorías y temas por defecto y volverás a elegir oposición. ¿Continuar?",
-                  [
-                    { text: "Cancelar", style: "cancel" },
-                    {
-                      text: "Reiniciar",
-                      style: "destructive",
-                      onPress: () => {
-                        resetAll();
-                        navigation.reset({
-                          index: 0,
-                          routes: [{ name: "Selecciona oposición" }],
-                        });
-                      },
-                    },
-                  ]
-                )
-              }
-              style={styles.actionBtn}
-            >
-              Reiniciar
-            </Button>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chips}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
           >
-            {categories.map((c) => (
-              <Chip key={c.id} style={styles.chip}>
-                {c.name}
-              </Chip>
-            ))}
-          </ScrollView>
+            <Text style={styles.catName}>
+              {progressFilter === "__global__"
+                ? "Progreso global"
+                : `Progreso · ${
+                    categories.find((c) => c.id === progressFilter)?.name ?? ""
+                  }`}
+            </Text>
+            <IconButton
+              icon="chevron-down"
+              onPress={() => setShowProgressSelector(true)}
+              style={styles.actionBtn}
+            />
+          </View>
+          {(() => {
+            const perCat = categoryProgress(topics);
+            const isGlobal = progressFilter === "__global__";
+            const value = isGlobal ? global : perCat[progressFilter] ?? 0;
+            const idx = categories.findIndex((c) => c.id === progressFilter);
+            const color = isGlobal
+              ? undefined
+              : categoryColors[idx >= 0 ? idx % categoryColors.length : 0];
+            return (
+              <View style={{ marginTop: 8 }}>
+                <View style={styles.catHeaderRow}>
+                  <Text style={styles.catName}>Completado</Text>
+                  <Text style={styles.catPercent}>{`${Math.round(
+                    (value ?? 0) * 100
+                  )}%`}</Text>
+                </View>
+                <ProgressBar
+                  progress={value ?? 0}
+                  color={color}
+                  style={[styles.catBarProgressFull, styles.catBarTrack]}
+                />
+              </View>
+            );
+          })()}
+          {actionsOpen ? (
+            <View style={styles.actionsRow}>
+              <Button
+                mode="text"
+                onPress={() => navigation.navigate("Categorías")}
+                icon="tag"
+                style={styles.actionBtn}
+              >
+                Gestionar categorías
+              </Button>
+              <Button
+                mode="text"
+                icon="plus"
+                onPress={() => setShowAdd(true)}
+                style={styles.actionBtn}
+              >
+                Añadir tema
+              </Button>
+              <Button
+                mode="text"
+                icon="folder-plus-outline"
+                onPress={() => setShowAddFolder(true)}
+                style={styles.actionBtn}
+              >
+                Nueva carpeta
+              </Button>
+              <Button
+                mode="text"
+                icon="backup-restore"
+                onPress={() =>
+                  Alert.alert(
+                    "Reiniciar datos",
+                    "Se restaurarán las categorías y temas por defecto y volverás a elegir oposición. ¿Continuar?",
+                    [
+                      { text: "Cancelar", style: "cancel" },
+                      {
+                        text: "Reiniciar",
+                        style: "destructive",
+                        onPress: () => {
+                          resetAll();
+                          navigation.reset({
+                            index: 0,
+                            routes: [{ name: "Selecciona oposición" }],
+                          });
+                        },
+                      },
+                    ]
+                  )
+                }
+                style={styles.actionBtn}
+              >
+                Reiniciar
+              </Button>
+            </View>
+          ) : null}
+          <View style={{ alignItems: "center", marginTop: 2 }}>
+            <IconButton
+              icon={actionsOpen ? "chevron-up" : "chevron-down"}
+              size={40}
+              onPress={toggleActions}
+              style={{ margin: 0 }}
+            />
+          </View>
         </Card.Content>
       </Card>
 
@@ -213,7 +249,13 @@ export default function TableScreen() {
           <>
             {folders.map((f) => {
               const sectionTopics = topics.filter((t) => t.folderId === f.id);
-              const prog = globalProgress(sectionTopics, categories);
+              const effectiveCats = getEffectiveCategories(
+                categories,
+                folderCategories[f.id] ?? [],
+                folderCategoryOrder[f.id] ?? [],
+                folderHiddenGlobals[f.id] ?? []
+              );
+              const prog = globalProgress(sectionTopics, effectiveCats);
               return (
                 <View
                   key={f.id}
@@ -242,33 +284,6 @@ export default function TableScreen() {
                           progress={prog}
                           style={styles.progressFolder}
                         />
-                        <View style={styles.catBarsContainerFolder}>
-                          {(() => {
-                            const perCat = categoryProgress(sectionTopics);
-                            return categories.map((c, idx) => (
-                              <View key={c.id} style={styles.catItem}>
-                                <View style={styles.catHeaderRow}>
-                                  <Text style={styles.catName}>{c.name}</Text>
-                                  <Text
-                                    style={styles.catPercent}
-                                  >{`${Math.round(
-                                    (perCat[c.id] ?? 0) * 100
-                                  )}%`}</Text>
-                                </View>
-                                <ProgressBar
-                                  progress={perCat[c.id] ?? 0}
-                                  color={
-                                    categoryColors[idx % categoryColors.length]
-                                  }
-                                  style={[
-                                    styles.catBarProgressFull,
-                                    styles.catBarTrack,
-                                  ]}
-                                />
-                              </View>
-                            ));
-                          })()}
-                        </View>
                       </Card.Content>
                     </Card>
                   </TouchableOpacity>
@@ -521,6 +536,52 @@ export default function TableScreen() {
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setShowNote(false)}>Cerrar</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog
+          visible={showProgressSelector}
+          onDismiss={() => setShowProgressSelector(false)}
+        >
+          <Dialog.Title>Seleccionar progreso</Dialog.Title>
+          <Dialog.ScrollArea>
+            <ScrollView style={{ paddingHorizontal: 16, maxHeight: 360 }}>
+              <RadioButton.Group
+                onValueChange={(val) => setProgressFilter(val)}
+                value={progressFilter}
+              >
+                <Pressable
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingVertical: 6,
+                  }}
+                  onPress={() => setProgressFilter("__global__")}
+                >
+                  <RadioButton value="__global__" />
+                  <Text style={{ marginLeft: 4 }}>Global</Text>
+                </Pressable>
+                {categories.map((c) => (
+                  <Pressable
+                    key={c.id}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingVertical: 6,
+                    }}
+                    onPress={() => setProgressFilter(c.id)}
+                  >
+                    <RadioButton value={c.id} />
+                    <Text style={{ marginLeft: 4 }}>{c.name}</Text>
+                  </Pressable>
+                ))}
+              </RadioButton.Group>
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => setShowProgressSelector(false)}>
+              Cerrar
+            </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

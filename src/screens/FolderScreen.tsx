@@ -18,10 +18,10 @@ import {
   Portal,
   Dialog,
   IconButton,
-  Menu,
+  RadioButton,
   TextInput as PaperInput,
 } from "react-native-paper";
-import { useStore } from "../store/useStore";
+import { useStore, getEffectiveCategories } from "../store/useStore";
 import { Alert } from "react-native";
 import { globalProgress, topicProgress } from "../utils/progress";
 
@@ -35,6 +35,9 @@ export default function FolderScreen() {
     topics,
     folders,
     categories,
+    folderCategories,
+    folderCategoryOrder,
+    folderHiddenGlobals,
     toggleCheck,
     incrementReview,
     decrementReview,
@@ -55,23 +58,42 @@ export default function FolderScreen() {
     return f ? f.name : "Carpeta";
   }, [folders, folderId]);
 
+  const effectiveCategories = useMemo(
+    () =>
+      folderId
+        ? getEffectiveCategories(
+            categories,
+            folderCategories[folderId] ?? [],
+            folderCategoryOrder[folderId] ?? [],
+            folderHiddenGlobals[folderId] ?? []
+          )
+        : categories,
+    [
+      categories,
+      folderCategories,
+      folderCategoryOrder,
+      folderHiddenGlobals,
+      folderId,
+    ]
+  );
+
   const prog = useMemo(
-    () => globalProgress(sectionTopics, categories),
-    [sectionTopics, categories]
+    () => globalProgress(sectionTopics, effectiveCategories),
+    [sectionTopics, effectiveCategories]
   );
 
   const categoryProgress = (topicsSubset: typeof topics) => {
     const totals: Record<string, { done: number; total: number }> = {};
-    categories.forEach(
+    effectiveCategories.forEach(
       (c) => (totals[c.id] = { done: 0, total: topicsSubset.length })
     );
     topicsSubset.forEach((t) => {
-      categories.forEach((c) => {
+      effectiveCategories.forEach((c) => {
         if (t.checks[c.id]) totals[c.id].done += 1;
       });
     });
     const result: Record<string, number> = {};
-    categories.forEach((c) => {
+    effectiveCategories.forEach((c) => {
       const { done, total } = totals[c.id];
       result[c.id] = total > 0 ? done / total : 0;
     });
@@ -94,9 +116,11 @@ export default function FolderScreen() {
   const [showBulk, setShowBulk] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
 
-  const [menuVisible, setMenuVisible] = useState(false);
   const [showRenameFolder, setShowRenameFolder] = useState(false);
   const [renameFolderName, setRenameFolderName] = useState("");
+
+  const [progressFilter, setProgressFilter] = useState<string>("__global__");
+  const [showProgressSelector, setShowProgressSelector] = useState(false);
 
   const candidates = useMemo(() => {
     // If we are inside a folder, candidates are topics NOT in this folder.
@@ -133,85 +157,127 @@ export default function FolderScreen() {
           title={`${folderName} · Progreso ${Math.round(prog * 100)}%`}
           right={() =>
             folderId ? (
-              <Menu
-                visible={menuVisible}
-                onDismiss={() => setMenuVisible(false)}
-                anchor={
-                  <IconButton
-                    icon="dots-vertical"
-                    size={20}
-                    onPress={() => setMenuVisible(true)}
-                  />
-                }
-              >
-                <Menu.Item
-                  onPress={() => {
-                    setMenuVisible(false);
-                    setRenameFolderName(folderName);
-                    setShowRenameFolder(true);
-                  }}
-                  title="Renombrar"
-                  leadingIcon="pencil-outline"
-                />
-                <Menu.Item
-                  onPress={() => {
-                    setMenuVisible(false);
-                    if (!folderId) return;
-                    Alert.alert(
-                      "Eliminar carpeta",
-                      "Los temas no se borrarán, solo quedarán sin carpeta. ¿Eliminar?",
-                      [
-                        { text: "Cancelar", style: "cancel" },
-                        {
-                          text: "Eliminar",
-                          style: "destructive",
-                          onPress: () => {
-                            removeFolder(folderId);
-                            navigation.goBack();
-                          },
-                        },
-                      ]
-                    );
-                  }}
-                  title="Eliminar"
-                  leadingIcon="delete-outline"
-                />
-              </Menu>
+              <IconButton
+                icon="dots-vertical"
+                size={20}
+                onPress={() => {
+                  Alert.alert("Acciones de carpeta", folderName, [
+                    {
+                      text: "Renombrar",
+                      onPress: () => {
+                        setRenameFolderName(folderName);
+                        setShowRenameFolder(true);
+                      },
+                    },
+                    {
+                      text: "Eliminar",
+                      style: "destructive",
+                      onPress: () => {
+                        if (!folderId) return;
+                        Alert.alert(
+                          "Eliminar carpeta",
+                          "Los temas no se borrarán, solo quedarán sin carpeta. ¿Eliminar?",
+                          [
+                            { text: "Cancelar", style: "cancel" },
+                            {
+                              text: "Eliminar",
+                              style: "destructive",
+                              onPress: () => {
+                                removeFolder(folderId);
+                                navigation.goBack();
+                              },
+                            },
+                          ]
+                        );
+                      },
+                    },
+                    { text: "Cancelar", style: "cancel" },
+                  ]);
+                }}
+              />
             ) : null
           }
         />
         <Card.Content>
-          <ProgressBar progress={prog} style={styles.progress} />
-          <View style={styles.catBarsContainer}>
-            {(() => {
-              const perCat = categoryProgress(sectionTopics);
-              return categories.map((c, idx) => (
-                <View key={c.id} style={styles.catItem}>
-                  <View style={styles.catHeaderRow}>
-                    <Text style={styles.catName}>{c.name}</Text>
-                    <Text style={styles.catPercent}>{`${Math.round(
-                      (perCat[c.id] ?? 0) * 100
-                    )}%`}</Text>
-                  </View>
-                  <ProgressBar
-                    progress={perCat[c.id] ?? 0}
-                    color={categoryColors[idx % categoryColors.length]}
-                    style={[styles.catBarProgressFull, styles.catBarTrack]}
-                  />
-                </View>
-              ));
-            })()}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <Text style={styles.catName}>
+              {progressFilter === "__global__"
+                ? "Progreso global"
+                : `Progreso · ${
+                    categories.find((c) => c.id === progressFilter)?.name ?? ""
+                  }`}
+            </Text>
+            <IconButton
+              icon="chevron-down"
+              onPress={() => setShowProgressSelector(true)}
+            />
           </View>
-          <View style={styles.bulkRow}>
+          {(() => {
+            const perCat = categoryProgress(sectionTopics);
+            const isGlobal = progressFilter === "__global__";
+            const value = isGlobal ? prog : perCat[progressFilter] ?? 0;
+            const idx = effectiveCategories.findIndex(
+              (c) => c.id === progressFilter
+            );
+            const color = isGlobal
+              ? undefined
+              : categoryColors[idx >= 0 ? idx % categoryColors.length : 0];
+            return (
+              <View style={{ marginTop: 8 }}>
+                <View style={styles.catHeaderRow}>
+                  <Text style={styles.catName}>Completado</Text>
+                  <Text style={styles.catPercent}>
+                    {`${Math.round((value ?? 0) * 100)}%`}
+                  </Text>
+                </View>
+                <ProgressBar
+                  progress={value ?? 0}
+                  color={color}
+                  style={[styles.catBarProgressFull, styles.catBarTrack]}
+                />
+              </View>
+            );
+          })()}
+          <View
+            style={[
+              styles.bulkRow,
+              {
+                flexDirection: "row",
+                alignItems: "center",
+                flexWrap: "wrap",
+                columnGap: 8,
+                rowGap: 6,
+              },
+            ]}
+          >
             <Button
-              mode="contained-tonal"
+              mode="text"
+              compact
               icon={folderId ? "folder-plus-outline" : "folder-remove-outline"}
               onPress={() => setShowBulk(true)}
+              style={styles.actionBtnSm}
             >
               {folderId
                 ? "Añadir temas a la carpeta"
                 : "Quitar temas de carpetas"}
             </Button>
+            {folderId ? (
+              <Button
+                mode="text"
+                compact
+                icon="tag"
+                onPress={() => navigation.navigate("Categorías", { folderId })}
+                style={styles.actionBtnSm}
+              >
+                Gestionar categorías
+              </Button>
+            ) : null}
           </View>
         </Card.Content>
       </Card>
@@ -325,21 +391,119 @@ export default function FolderScreen() {
             </Button>
           </Dialog.Actions>
         </Dialog>
+        <Dialog
+          visible={showProgressSelector}
+          onDismiss={() => setShowProgressSelector(false)}
+        >
+          <Dialog.Title>Seleccionar progreso</Dialog.Title>
+          <Dialog.ScrollArea>
+            <ScrollView style={{ paddingHorizontal: 16, maxHeight: 360 }}>
+              <RadioButton.Group
+                onValueChange={(val) => setProgressFilter(val)}
+                value={progressFilter}
+              >
+                <Pressable
+                  style={styles.bulkItem}
+                  onPress={() => setProgressFilter("__global__")}
+                >
+                  <RadioButton value="__global__" />
+                  <Text style={styles.bulkItemText}>Global</Text>
+                </Pressable>
+                {categories.map((c) => (
+                  <Pressable
+                    key={c.id}
+                    style={styles.bulkItem}
+                    onPress={() => setProgressFilter(c.id)}
+                  >
+                    <RadioButton value={c.id} />
+                    <Text style={styles.bulkItemText}>{c.name}</Text>
+                  </Pressable>
+                ))}
+              </RadioButton.Group>
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => setShowProgressSelector(false)}>
+              Cerrar
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+        <Dialog
+          visible={showProgressSelector}
+          onDismiss={() => setShowProgressSelector(false)}
+        >
+          <Dialog.Title>Seleccionar progreso</Dialog.Title>
+          <Dialog.ScrollArea>
+            <ScrollView style={{ paddingHorizontal: 16, maxHeight: 360 }}>
+              <RadioButton.Group
+                onValueChange={(val) => setProgressFilter(val)}
+                value={progressFilter}
+              >
+                <Pressable
+                  style={styles.bulkItem}
+                  onPress={() => setProgressFilter("__global__")}
+                >
+                  <RadioButton value="__global__" />
+                  <Text style={styles.bulkItemText}>Global</Text>
+                </Pressable>
+                {effectiveCategories.map((c) => (
+                  <Pressable
+                    key={c.id}
+                    style={styles.bulkItem}
+                    onPress={() => setProgressFilter(c.id)}
+                  >
+                    <RadioButton value={c.id} />
+                    <Text style={styles.bulkItemText}>{c.name}</Text>
+                  </Pressable>
+                ))}
+              </RadioButton.Group>
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            <Button onPress={() => setShowProgressSelector(false)}>
+              Cerrar
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
 
       {sectionTopics.map((item) => {
-        const progT = topicProgress(item, categories.length);
+        const progT = topicProgress(item, effectiveCategories.length);
         return (
           <TouchableOpacity
             key={item.id}
             onPress={() => navigation.navigate("Tema", { topicId: item.id })}
           >
             <Card mode="outlined" style={styles.rowCard}>
-              <Card.Title title={item.title} />
+              <Card.Title
+                title={item.title}
+                right={() =>
+                  folderId ? (
+                    <IconButton
+                      icon="folder-remove-outline"
+                      size={18}
+                      onPress={() => {
+                        Alert.alert(
+                          "Quitar de la carpeta",
+                          "Este tema pasará a estar fuera de la carpeta. ¿Confirmar?",
+                          [
+                            { text: "Cancelar", style: "cancel" },
+                            {
+                              text: "Quitar",
+                              onPress: () =>
+                                moveTopicToFolder(item.id, undefined),
+                            },
+                          ]
+                        );
+                      }}
+                    />
+                  ) : null
+                }
+              />
               <Card.Content>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={styles.checkboxRow}>
-                    {categories.map((c) => (
+                    {effectiveCategories.map((c) => (
                       <Pressable
                         key={c.id}
                         style={styles.checkboxItem}
@@ -357,7 +521,7 @@ export default function FolderScreen() {
                 </ScrollView>
                 <ProgressBar progress={progT} style={styles.progressSmall} />
                 {(() => {
-                  const repasadoCat = categories.find(
+                  const repasadoCat = effectiveCategories.find(
                     (c) =>
                       c.id === "repasado" || c.name.toLowerCase() === "repasado"
                   );
