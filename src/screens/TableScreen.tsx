@@ -28,7 +28,7 @@ import {
 } from "react-native-paper";
 import { useStore } from "../store/useStore";
 import { getEffectiveCategories } from "../store/useStore";
-import { globalProgress, topicProgress, folderTotals } from "../utils/progress";
+import { globalProgress, topicProgress, folderTotals, globalProgressWithBulletins, bulletinsOnlyProgress } from "../utils/progress";
 
 export default function TableScreen() {
   const navigation =
@@ -37,12 +37,15 @@ export default function TableScreen() {
     topics,
     categories,
     folders,
+    bulletins,
     folderCategories,
     folderCategoryOrder,
     folderHiddenGlobals,
     toggleCheck,
     addTopic,
     addFolder,
+    addBulletin,
+    moveBulletinToFolder,
     moveTopicToFolder,
     resetAll,
     incrementReview,
@@ -56,6 +59,13 @@ export default function TableScreen() {
   const [newFolderName, setNewFolderName] = useState("");
   const [showMove, setShowMove] = useState(false);
   const [movingTopicId, setMovingTopicId] = useState<string | undefined>(
+    undefined
+  );
+  const [showAddBulletin, setShowAddBulletin] = useState(false);
+  const [newBulletinTitle, setNewBulletinTitle] = useState("");
+  const [newBulletinExerciseCount, setNewBulletinExerciseCount] = useState("");
+  const [showMoveBulletin, setShowMoveBulletin] = useState(false);
+  const [movingBulletinId, setMovingBulletinId] = useState<string | undefined>(
     undefined
   );
 
@@ -79,8 +89,13 @@ export default function TableScreen() {
   };
 
   const global = useMemo(
-    () => globalProgress(topics, categories),
-    [topics, categories]
+    () => globalProgressWithBulletins(topics, categories, bulletins),
+    [topics, categories, bulletins]
+  );
+
+  const bulletinsProgress = useMemo(
+    () => bulletinsOnlyProgress(bulletins),
+    [bulletins]
   );
   const fade = useRef(new Animated.Value(0)).current;
 
@@ -138,6 +153,8 @@ export default function TableScreen() {
             <Text style={styles.catName}>
               {progressFilter === "__global__"
                 ? "Progreso global"
+                : progressFilter === "__bulletins__"
+                ? "Progreso de Boletines"
                 : `Progreso · ${
                     categories.find((c) => c.id === progressFilter)?.name ?? ""
                   }`}
@@ -151,9 +168,17 @@ export default function TableScreen() {
           {(() => {
             const perCat = categoryProgress(topics);
             const isGlobal = progressFilter === "__global__";
-            const value = isGlobal ? global : perCat[progressFilter] ?? 0;
+            const isBulletins = progressFilter === "__bulletins__";
+            let value = 0;
+            if (isGlobal) {
+              value = global;
+            } else if (isBulletins) {
+              value = bulletinsProgress;
+            } else {
+              value = perCat[progressFilter] ?? 0;
+            }
             const idx = categories.findIndex((c) => c.id === progressFilter);
-            const color = isGlobal
+            const color = isGlobal || isBulletins
               ? undefined
               : categoryColors[idx >= 0 ? idx % categoryColors.length : 0];
             return (
@@ -197,6 +222,14 @@ export default function TableScreen() {
                 style={styles.actionBtn}
               >
                 Nueva carpeta
+              </Button>
+              <Button
+                mode="text"
+                icon="file-document-outline"
+                onPress={() => setShowAddBulletin(true)}
+                style={styles.actionBtn}
+              >
+                Añadir boletín
               </Button>
               <Button
                 mode="text"
@@ -293,7 +326,9 @@ export default function TableScreen() {
 
             {(() => {
               const sectionTopics = topics.filter((t) => !t.folderId);
-              if (sectionTopics.length === 0) return null;
+              const sectionBulletins = bulletins.filter((b) => !b.folderId);
+              if (sectionTopics.length === 0 && sectionBulletins.length === 0)
+                return null;
               const prog = globalProgress(sectionTopics, categories);
               const { done, total } = folderTotals(
                 sectionTopics,
@@ -305,6 +340,60 @@ export default function TableScreen() {
                   key="__none__"
                   style={[styles.folderSection, styles.noFolderSectionBg]}
                 >
+                  {sectionBulletins.map((bulletin) => {
+                    const completed = Object.values(
+                      bulletin.completedExercises
+                    ).filter((v) => v).length;
+                    const progB =
+                      bulletin.exerciseCount > 0
+                        ? completed / bulletin.exerciseCount
+                        : 0;
+                    return (
+                      <TouchableOpacity
+                        key={bulletin.id}
+                        onPress={() =>
+                          navigation.navigate("Boletín", {
+                            bulletinId: bulletin.id,
+                          })
+                        }
+                      >
+                        <Card mode="outlined" style={styles.rowCard}>
+                          <Card.Title
+                            title={bulletin.title}
+                            subtitle={`${completed} de ${bulletin.exerciseCount} ejercicios`}
+                            left={(props) => (
+                              <IconButton
+                                {...props}
+                                icon="file-document-outline"
+                                size={20}
+                              />
+                            )}
+                            right={() => (
+                              <View style={styles.rightIcons}>
+                                <IconButton
+                                  icon="folder-move-outline"
+                                  size={18}
+                                  onPress={() => {
+                                    setMovingBulletinId(bulletin.id);
+                                    setShowMoveBulletin(true);
+                                  }}
+                                />
+                              </View>
+                            )}
+                          />
+                          <Card.Content>
+                            <ProgressBar
+                              progress={progB}
+                              style={styles.progressSmall}
+                            />
+                            <Text style={styles.progressLabel}>
+                              {(progB * 100).toFixed(0)}% completado
+                            </Text>
+                          </Card.Content>
+                        </Card>
+                      </TouchableOpacity>
+                    );
+                  })}
                   {sectionTopics.map((item) => {
                     const progT = topicProgress(item, categories.length);
                     return (
@@ -561,6 +650,17 @@ export default function TableScreen() {
                   <RadioButton value="__global__" />
                   <Text style={{ marginLeft: 4 }}>Global</Text>
                 </Pressable>
+                <Pressable
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingVertical: 6,
+                  }}
+                  onPress={() => setProgressFilter("__bulletins__")}
+                >
+                  <RadioButton value="__bulletins__" />
+                  <Text style={{ marginLeft: 4 }}>Boletines</Text>
+                </Pressable>
                 {categories.map((c) => (
                   <Pressable
                     key={c.id}
@@ -584,6 +684,102 @@ export default function TableScreen() {
             </Button>
           </Dialog.Actions>
         </Dialog>
+
+        <Dialog
+          visible={showAddBulletin}
+          onDismiss={() => setShowAddBulletin(false)}
+        >
+          <Dialog.Title>Nuevo boletín</Dialog.Title>
+          <Dialog.Content>
+            <PaperInput
+              mode="outlined"
+              placeholder="Título del boletín"
+              value={newBulletinTitle}
+              onChangeText={setNewBulletinTitle}
+              returnKeyType="next"
+              style={{ marginBottom: 12 }}
+            />
+            <PaperInput
+              mode="outlined"
+              placeholder="Número de ejercicios"
+              value={newBulletinExerciseCount}
+              onChangeText={setNewBulletinExerciseCount}
+              keyboardType="number-pad"
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                const title = newBulletinTitle.trim();
+                const count = parseInt(newBulletinExerciseCount, 10);
+                if (title && count > 0) {
+                  addBulletin(title, count);
+                  setNewBulletinTitle("");
+                  setNewBulletinExerciseCount("");
+                  setShowAddBulletin(false);
+                }
+              }}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowAddBulletin(false)}>Cancelar</Button>
+            <Button
+              onPress={() => {
+                const title = newBulletinTitle.trim();
+                const count = parseInt(newBulletinExerciseCount, 10);
+                if (title && count > 0) {
+                  addBulletin(title, count);
+                  setNewBulletinTitle("");
+                  setNewBulletinExerciseCount("");
+                  setShowAddBulletin(false);
+                }
+              }}
+              disabled={
+                !newBulletinTitle.trim() ||
+                !newBulletinExerciseCount ||
+                parseInt(newBulletinExerciseCount, 10) < 1
+              }
+            >
+              Añadir
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog
+          visible={showMoveBulletin}
+          onDismiss={() => setShowMoveBulletin(false)}
+        >
+          <Dialog.Title>Mover boletín a carpeta</Dialog.Title>
+          <Dialog.Content>
+            <View style={{ gap: 8 }}>
+              <Button
+                mode="outlined"
+                icon="folder-remove-outline"
+                onPress={() => {
+                  if (movingBulletinId)
+                    moveBulletinToFolder(movingBulletinId, undefined);
+                  setShowMoveBulletin(false);
+                }}
+              >
+                Sin carpeta
+              </Button>
+              {folders.map((f) => (
+                <Button
+                  key={f.id}
+                  mode="contained-tonal"
+                  icon="folder-outline"
+                  onPress={() => {
+                    if (movingBulletinId)
+                      moveBulletinToFolder(movingBulletinId, f.id);
+                    setShowMoveBulletin(false);
+                  }}
+                >
+                  {f.name}
+                </Button>
+              ))}
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowMoveBulletin(false)}>Cerrar</Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </Animated.View>
   );
@@ -595,6 +791,7 @@ const styles = StyleSheet.create({
   card: { marginBottom: 12 },
   progress: { height: 10, borderRadius: 8 },
   progressSmall: { height: 8, borderRadius: 8, marginTop: 8 },
+  progressLabel: { marginTop: 6, color: "#555", fontSize: 12 },
   catBarsContainer: { marginTop: 10 },
   catBarsContainerFolder: { marginTop: 10 },
   catItem: { marginTop: 8 },

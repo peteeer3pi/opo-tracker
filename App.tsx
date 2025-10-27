@@ -15,6 +15,7 @@ import { View, ScrollView } from "react-native";
 import TableScreen from "./src/screens/TableScreen";
 import CategoriesScreen from "./src/screens/CategoriesScreen";
 import TopicDetailScreen from "./src/screens/TopicDetailScreen";
+import BulletinDetailScreen from "./src/screens/BulletinDetailScreen";
 import { useStore } from "./src/store/useStore";
 import { TOPIC_TITLES } from "./src/data/titles";
 import FolderScreen from "./src/screens/FolderScreen";
@@ -23,6 +24,7 @@ type RootStackParamList = {
   Dashboard: undefined;
   Categorías: { folderId?: string } | undefined;
   Tema: { topicId: string };
+  Boletín: { bulletinId: string };
   Carpeta: { folderId?: string };
   "Selecciona oposición": undefined;
 };
@@ -140,6 +142,7 @@ export default function App() {
               <Stack.Screen name="Dashboard" component={TableScreen} />
               <Stack.Screen name="Categorías" component={CategoriesScreen} />
               <Stack.Screen name="Tema" component={TopicDetailScreen} />
+              <Stack.Screen name="Boletín" component={BulletinDetailScreen} />
               <Stack.Screen name="Carpeta" component={FolderScreen} />
             </Stack.Navigator>
           </SafeAreaView>

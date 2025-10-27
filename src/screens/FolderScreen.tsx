@@ -33,6 +33,7 @@ export default function FolderScreen() {
 
   const {
     topics,
+    bulletins,
     folders,
     categories,
     folderCategories,
@@ -42,6 +43,7 @@ export default function FolderScreen() {
     incrementReview,
     decrementReview,
     moveTopicToFolder,
+    moveBulletinToFolder,
     renameFolder,
     removeFolder,
   } = useStore();
@@ -51,6 +53,12 @@ export default function FolderScreen() {
       ? topics.filter((t) => t.folderId === folderId)
       : topics.filter((t) => !t.folderId);
   }, [topics, folderId]);
+
+  const sectionBulletins = useMemo(() => {
+    return folderId
+      ? bulletins.filter((b) => b.folderId === folderId)
+      : bulletins.filter((b) => !b.folderId);
+  }, [bulletins, folderId]);
 
   const folderName = useMemo(() => {
     if (!folderId) return "Sin carpeta";
@@ -467,6 +475,66 @@ export default function FolderScreen() {
         </Dialog>
       </Portal>
 
+      {sectionBulletins.map((bulletin) => {
+        const completed = Object.values(bulletin.completedExercises).filter(
+          (v) => v
+        ).length;
+        const progB =
+          bulletin.exerciseCount > 0
+            ? completed / bulletin.exerciseCount
+            : 0;
+        return (
+          <TouchableOpacity
+            key={bulletin.id}
+            onPress={() =>
+              navigation.navigate("Boletín", { bulletinId: bulletin.id })
+            }
+          >
+            <Card mode="outlined" style={styles.rowCard}>
+              <Card.Title
+                title={bulletin.title}
+                subtitle={`${completed} de ${bulletin.exerciseCount} ejercicios`}
+                left={(props) => (
+                  <IconButton
+                    {...props}
+                    icon="file-document-outline"
+                    size={20}
+                  />
+                )}
+                right={() =>
+                  folderId ? (
+                    <IconButton
+                      icon="folder-remove-outline"
+                      size={18}
+                      onPress={() => {
+                        Alert.alert(
+                          "Quitar de la carpeta",
+                          "Este boletín pasará a estar fuera de la carpeta. ¿Confirmar?",
+                          [
+                            { text: "Cancelar", style: "cancel" },
+                            {
+                              text: "Quitar",
+                              onPress: () =>
+                                moveBulletinToFolder(bulletin.id, undefined),
+                            },
+                          ]
+                        );
+                      }}
+                    />
+                  ) : null
+                }
+              />
+              <Card.Content>
+                <ProgressBar progress={progB} style={styles.progressSmall} />
+                <Text style={styles.progressLabel}>
+                  {(progB * 100).toFixed(0)}% completado
+                </Text>
+              </Card.Content>
+            </Card>
+          </TouchableOpacity>
+        );
+      })}
+
       {sectionTopics.map((item) => {
         const progT = topicProgress(item, effectiveCategories.length);
         return (
@@ -568,6 +636,7 @@ const styles = StyleSheet.create({
   card: { marginBottom: 12 },
   progress: { height: 10, borderRadius: 8 },
   progressSmall: { height: 8, borderRadius: 8, marginTop: 8 },
+  progressLabel: { marginTop: 6, color: "#555", fontSize: 12 },
   catBarsContainer: { marginTop: 10 },
   catItem: { marginTop: 8 },
   catHeaderRow: {

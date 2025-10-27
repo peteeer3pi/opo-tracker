@@ -23,10 +23,20 @@ export type Folder = {
   name: string;
 };
 
+export type Bulletin = {
+  id: string;
+  title: string;
+  exerciseCount: number;
+  completedExercises: Record<number, boolean>; // key: exercise number (1-based)
+  updatedAt?: number;
+  folderId?: string;
+};
+
 export type StoreState = {
   categories: Category[];
   topics: Topic[];
   folders: Folder[];
+  bulletins: Bulletin[];
   folderCategories: Record<string, Category[]>; // folderId -> categories
   folderCategoryOrder: Record<string, string[]>; // folderId -> ordered list of effective category ids (global+local)
   folderHiddenGlobals: Record<string, string[]>; // folderId -> list of global category ids hidden in this folder
@@ -70,6 +80,12 @@ export type StoreState = {
   renameFolder: (folderId: string, name: string) => void;
   removeFolder: (folderId: string) => void;
   moveTopicToFolder: (topicId: string, folderId?: string) => void;
+  addBulletin: (title: string, exerciseCount: number, folderId?: string) => void;
+  removeBulletin: (bulletinId: string) => void;
+  renameBulletin: (bulletinId: string, title: string) => void;
+  updateBulletinExerciseCount: (bulletinId: string, exerciseCount: number) => void;
+  toggleExercise: (bulletinId: string, exerciseNumber: number) => void;
+  moveBulletinToFolder: (bulletinId: string, folderId?: string) => void;
   resetAll: () => void;
 };
 
@@ -103,6 +119,7 @@ export const useStore = create<StoreState>()(
       selectedOpposition: undefined,
       topics: [],
       folders: [],
+      bulletins: [],
       folderCategories: {},
       folderCategoryOrder: {},
       folderHiddenGlobals: {},
@@ -456,12 +473,87 @@ export const useStore = create<StoreState>()(
         set({ topics });
       },
 
+      addBulletin: (title, exerciseCount, folderId) => {
+        const clean = title.trim();
+        if (!clean || exerciseCount < 1) return;
+        const id = `b_${Date.now()}`;
+        const completedExercises: Record<number, boolean> = {};
+        for (let i = 1; i <= exerciseCount; i++) {
+          completedExercises[i] = false;
+        }
+        const bulletin: Bulletin = {
+          id,
+          title: clean,
+          exerciseCount,
+          completedExercises,
+          updatedAt: Date.now(),
+          folderId,
+        };
+        set({ bulletins: [...get().bulletins, bulletin] });
+      },
+
+      removeBulletin: (bulletinId) => {
+        set({ bulletins: get().bulletins.filter((b) => b.id !== bulletinId) });
+      },
+
+      renameBulletin: (bulletinId, title) => {
+        const bulletins = get().bulletins.map((b) =>
+          b.id === bulletinId
+            ? { ...b, title: title.trim(), updatedAt: Date.now() }
+            : b
+        );
+        set({ bulletins });
+      },
+
+      updateBulletinExerciseCount: (bulletinId, exerciseCount) => {
+        if (exerciseCount < 1) return;
+        const bulletins = get().bulletins.map((b) => {
+          if (b.id !== bulletinId) return b;
+          const newCompleted: Record<number, boolean> = {};
+          // Mantener los ejercicios existentes que estén dentro del nuevo rango
+          for (let i = 1; i <= exerciseCount; i++) {
+            newCompleted[i] = b.completedExercises[i] ?? false;
+          }
+          return {
+            ...b,
+            exerciseCount,
+            completedExercises: newCompleted,
+            updatedAt: Date.now(),
+          };
+        });
+        set({ bulletins });
+      },
+
+      toggleExercise: (bulletinId, exerciseNumber) => {
+        const bulletins = get().bulletins.map((b) => {
+          if (b.id !== bulletinId) return b;
+          const current = !!b.completedExercises[exerciseNumber];
+          return {
+            ...b,
+            completedExercises: {
+              ...b.completedExercises,
+              [exerciseNumber]: !current,
+            },
+            updatedAt: Date.now(),
+          };
+        });
+        set({ bulletins });
+      },
+
+      moveBulletinToFolder: (bulletinId, folderId) => {
+        const bulletins = get().bulletins.map((b) =>
+          b.id === bulletinId ? { ...b, folderId } : b
+        );
+        set({ bulletins });
+      },
+
       resetAll: () => {
         const categories = DEFAULT_CATEGORIES;
         set({
           categories,
           topics: [],
           folders: [],
+          bulletins: [],
           folderCategories: {},
           folderCategoryOrder: {},
           folderHiddenGlobals: {},
@@ -476,6 +568,7 @@ export const useStore = create<StoreState>()(
         categories: state.categories,
         topics: state.topics,
         folders: state.folders,
+        bulletins: state.bulletins,
         folderCategories: state.folderCategories,
         folderCategoryOrder: state.folderCategoryOrder,
         folderHiddenGlobals: state.folderHiddenGlobals,

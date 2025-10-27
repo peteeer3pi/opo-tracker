@@ -1,4 +1,4 @@
-import type { Category, Topic } from "../store/useStore";
+import type { Category, Topic, Bulletin } from "../store/useStore";
 
 export function topicProgress(topic: Topic, totalCategories: number): number {
   if (totalCategories === 0) return 0;
@@ -51,4 +51,49 @@ export function folderTotals(
     0
   );
   return { done, total };
+}
+
+export function bulletinProgress(bulletin: Bulletin): number {
+  if (bulletin.exerciseCount === 0) return 0;
+  const completed = Object.values(bulletin.completedExercises).filter(
+    Boolean
+  ).length;
+  return completed / bulletin.exerciseCount;
+}
+
+export function globalProgressWithBulletins(
+  topics: Topic[],
+  categories: Category[],
+  bulletins: Bulletin[]
+): number {
+  const topicCells = topics.length * categories.length;
+  const bulletinCells = bulletins.reduce((acc, b) => acc + b.exerciseCount, 0);
+  const totalCells = topicCells + bulletinCells;
+
+  if (totalCells === 0) return 0;
+
+  const topicsDone = topics.reduce(
+    (acc, t) => acc + Object.values(t.checks).filter(Boolean).length,
+    0
+  );
+  const bulletinsDone = bulletins.reduce(
+    (acc, b) =>
+      acc + Object.values(b.completedExercises).filter(Boolean).length,
+    0
+  );
+
+  return (topicsDone + bulletinsDone) / totalCells;
+}
+
+export function bulletinsOnlyProgress(bulletins: Bulletin[]): number {
+  const totalExercises = bulletins.reduce((acc, b) => acc + b.exerciseCount, 0);
+  if (totalExercises === 0) return 0;
+
+  const completedExercises = bulletins.reduce(
+    (acc, b) =>
+      acc + Object.values(b.completedExercises).filter(Boolean).length,
+    0
+  );
+
+  return completedExercises / totalExercises;
 }
