@@ -15,8 +15,10 @@ import { IconButton } from "react-native-paper";
 import { useStore } from "../store/useStore";
 import { getEffectiveCategories } from "../store/useStore";
 import { useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 
 export default function CategoriesScreen() {
+  const { t } = useTranslation();
   const route = useRoute<any>();
   const { folderId } = (route.params ?? {}) as { folderId?: string };
   const {
@@ -174,12 +176,12 @@ export default function CategoriesScreen() {
                       onPress={() => {
                         const name = item.name;
                         Alert.alert(
-                          "Ocultar categoría",
-                          `Esta categoría global se ocultará solo en esta carpeta: "${name}". ¿Confirmar?`,
+                          t('categories.hideTitle'),
+                          t('categories.hideMessage', { name }),
                           [
-                            { text: "Cancelar", style: "cancel" },
+                            { text: t('common.cancel'), style: "cancel" },
                             {
-                              text: "Ocultar",
+                              text: t('categories.hideButton'),
                               style: "destructive",
                               onPress: () =>
                                 hideGlobalInFolder(folderId, item.id),
@@ -196,12 +198,12 @@ export default function CategoriesScreen() {
                         const name = item.name;
                         if (folderId) {
                           Alert.alert(
-                            "Eliminar categoría",
-                            `Se eliminará de esta carpeta: "${name}". ¿Confirmar?`,
+                            t('categories.deleteTitle'),
+                            t('categories.deleteFolderMessage', { name }),
                             [
-                              { text: "Cancelar", style: "cancel" },
+                              { text: t('common.cancel'), style: "cancel" },
                               {
-                                text: "Eliminar",
+                                text: t('common.delete'),
                                 style: "destructive",
                                 onPress: () =>
                                   removeFolderCategory(
@@ -213,12 +215,12 @@ export default function CategoriesScreen() {
                           );
                         } else {
                           Alert.alert(
-                            "Eliminar categoría",
-                            `Esta categoría se eliminará globalmente: "${name}". ¿Confirmar?`,
+                            t('categories.deleteTitle'),
+                            t('categories.deleteMessage'),
                             [
-                              { text: "Cancelar", style: "cancel" },
+                              { text: t('common.cancel'), style: "cancel" },
                               {
-                                text: "Eliminar",
+                                text: t('common.delete'),
                                 style: "destructive",
                                 onPress: () => removeCategory(item.id),
                               },
@@ -240,7 +242,7 @@ export default function CategoriesScreen() {
         <TextInput
           style={[styles.input, { flex: 1 }]}
           placeholder={
-            folderId ? "Nueva categoría de la carpeta..." : "Nueva categoría..."
+            folderId ? t('categories.add') + " (carpeta)" : t('categories.add')
           }
           value={newCat}
           onChangeText={setNewCat}
@@ -263,7 +265,7 @@ export default function CategoriesScreen() {
             }
           }}
         >
-          <Text style={styles.addBtnText}>Añadir</Text>
+          <Text style={styles.addBtnText}>{t('common.add')}</Text>
         </Pressable>
       </View>
     </View>

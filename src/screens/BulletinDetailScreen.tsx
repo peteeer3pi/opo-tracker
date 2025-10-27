@@ -21,8 +21,11 @@ import {
   IconButton,
 } from "react-native-paper";
 import { useStore } from "../store/useStore";
+import { bulletinProgress } from "../utils/progress";
+import { useTranslation } from "react-i18next";
 
 export default function BulletinDetailScreen() {
+  const { t } = useTranslation();
   const route = useRoute<RouteProp<RootStackParamList, "Boletín">>();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -63,7 +66,7 @@ export default function BulletinDetailScreen() {
   if (!bulletin) {
     return (
       <View style={styles.container}>
-        <Text>El boletín no existe.</Text>
+        <Text>{t('bulletin.title')} no existe.</Text>
       </View>
     );
   }
@@ -81,8 +84,8 @@ export default function BulletinDetailScreen() {
       <Pressable onPress={Keyboard.dismiss}>
         <Card style={styles.card}>
         <Card.Title
-          title="Detalle del boletín"
-          subtitle={`Actualizado: ${
+          title={t('bulletin.title')}
+          subtitle={`${t('bulletin.updated')}: ${
             bulletin.updatedAt
               ? new Date(bulletin.updatedAt).toLocaleString()
               : "—"
@@ -94,12 +97,12 @@ export default function BulletinDetailScreen() {
               iconColor="#ef4444"
               onPress={() => {
                 Alert.alert(
-                  "Eliminar boletín",
-                  "¿Seguro que quieres eliminar este boletín?",
+                  t('bulletin.deleteTitle'),
+                  t('bulletin.deleteMessage'),
                   [
-                    { text: "Cancelar", style: "cancel" },
+                    { text: t('common.cancel'), style: "cancel" },
                     {
-                      text: "Eliminar",
+                      text: t('common.delete'),
                       style: "destructive",
                       onPress: () => {
                         removeBulletin(bulletin.id);
@@ -115,7 +118,7 @@ export default function BulletinDetailScreen() {
         <Card.Content>
           <TextInput
             mode="outlined"
-            label="Título"
+            label={t('bulletin.title')}
             value={title}
             onChangeText={setTitle}
             onBlur={() => title.trim() && renameBulletin(bulletin.id, title)}
@@ -124,10 +127,9 @@ export default function BulletinDetailScreen() {
           />
           <TextInput
             mode="outlined"
-            label="Número de ejercicios"
+            label={t('bulletin.exerciseCount')}
             value={exerciseCount}
             onChangeText={(text) => {
-              // Solo permitir números
               const numericText = text.replace(/[^0-9]/g, "");
               setExerciseCount(numericText);
             }}
@@ -145,7 +147,7 @@ export default function BulletinDetailScreen() {
           <View style={{ height: 12 }} />
           <ProgressBar progress={progress} style={styles.progress} />
           <Text style={styles.progressLabel}>
-            {completedCount} de {bulletin.exerciseCount} ejercicios completados
+            {t('bulletin.completed')}: {completedCount} / {bulletin.exerciseCount}
             ({(progress * 100).toFixed(0)}%)
           </Text>
         </Card.Content>
@@ -153,8 +155,8 @@ export default function BulletinDetailScreen() {
 
       <Card style={styles.card}>
         <Card.Title
-          title="Ejercicios"
-          subtitle="Pulsa para marcar/desmarcar como completado"
+          title={t('bulletin.exercises')}
+          subtitle={t('bulletin.checkSubtitle')}
         />
         <Card.Content>
           <View style={styles.exercisesGrid}>
@@ -171,7 +173,7 @@ export default function BulletinDetailScreen() {
                   }
                   onPress={() => toggleExercise(bulletin.id, num)}
                 />
-                <Text style={styles.exerciseNumber}>Ejercicio {num}</Text>
+                <Text style={styles.exerciseNumber}>{t('bulletin.exercises')} {num}</Text>
               </Pressable>
             ))}
           </View>

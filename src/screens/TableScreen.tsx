@@ -28,9 +28,18 @@ import {
 } from "react-native-paper";
 import { useStore } from "../store/useStore";
 import { getEffectiveCategories } from "../store/useStore";
-import { globalProgress, topicProgress, folderTotals, globalProgressWithBulletins, bulletinsOnlyProgress } from "../utils/progress";
+import {
+  globalProgress,
+  topicProgress,
+  folderTotals,
+  globalProgressWithBulletins,
+  bulletinsOnlyProgress,
+} from "../utils/progress";
+import { useTranslation } from "react-i18next";
+import LanguageSelector from "../components/LanguageSelector";
 
 export default function TableScreen() {
+  const { t } = useTranslation();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {
@@ -71,8 +80,12 @@ export default function TableScreen() {
 
   const [progressFilter, setProgressFilter] = useState<string>("__global__");
   const [showProgressSelector, setShowProgressSelector] = useState(false);
+  const [showLanguageSelector, setShowLanguageSelector] = useState(false);
 
   const [actionsOpen, setActionsOpen] = useState(true);
+  const actionsHeight = useRef(new Animated.Value(1)).current;
+  const actionsOpacity = useRef(new Animated.Value(1)).current;
+  const chevronRotation = useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
     if (
@@ -84,7 +97,29 @@ export default function TableScreen() {
   }, []);
 
   const toggleActions = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    const toValue = actionsOpen ? 0 : 1;
+
+    Animated.parallel([
+      Animated.spring(actionsHeight, {
+        toValue,
+        useNativeDriver: false,
+        friction: 8,
+        tension: 40,
+      }),
+      Animated.spring(actionsOpacity, {
+        toValue,
+        useNativeDriver: false,
+        friction: 8,
+        tension: 40,
+      }),
+      Animated.spring(chevronRotation, {
+        toValue: actionsOpen ? 1 : 0,
+        useNativeDriver: false,
+        friction: 8,
+        tension: 40,
+      }),
+    ]).start();
+
     setActionsOpen((v) => !v);
   };
 
@@ -103,7 +138,7 @@ export default function TableScreen() {
     Animated.timing(fade, {
       toValue: 1,
       duration: 400,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, [fade]);
 
@@ -178,9 +213,10 @@ export default function TableScreen() {
               value = perCat[progressFilter] ?? 0;
             }
             const idx = categories.findIndex((c) => c.id === progressFilter);
-            const color = isGlobal || isBulletins
-              ? undefined
-              : categoryColors[idx >= 0 ? idx % categoryColors.length : 0];
+            const color =
+              isGlobal || isBulletins
+                ? undefined
+                : categoryColors[idx >= 0 ? idx % categoryColors.length : 0];
             return (
               <View style={{ marginTop: 8 }}>
                 <View style={styles.catHeaderRow}>
@@ -197,7 +233,24 @@ export default function TableScreen() {
               </View>
             );
           })()}
-          {actionsOpen ? (
+          <Animated.View
+            style={{
+              maxHeight: actionsHeight.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 500],
+              }),
+              opacity: actionsOpacity,
+              overflow: "hidden",
+              transform: [
+                {
+                  scaleY: actionsHeight.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.8, 1],
+                  }),
+                },
+              ],
+            }}
+          >
             <View style={styles.actionsRow}>
               <Button
                 mode="text"
@@ -205,7 +258,7 @@ export default function TableScreen() {
                 icon="tag"
                 style={styles.actionBtn}
               >
-                Gestionar categorías
+                {t("dashboard.categories")}
               </Button>
               <Button
                 mode="text"
@@ -213,7 +266,7 @@ export default function TableScreen() {
                 onPress={() => setShowAdd(true)}
                 style={styles.actionBtn}
               >
-                Añadir tema
+                {t("dashboard.addTopic")}
               </Button>
               <Button
                 mode="text"
@@ -221,7 +274,7 @@ export default function TableScreen() {
                 onPress={() => setShowAddFolder(true)}
                 style={styles.actionBtn}
               >
-                Nueva carpeta
+                {t("dashboard.newFolder")}
               </Button>
               <Button
                 mode="text"
@@ -229,19 +282,27 @@ export default function TableScreen() {
                 onPress={() => setShowAddBulletin(true)}
                 style={styles.actionBtn}
               >
-                Añadir boletín
+                {t("dashboard.addBulletin")}
+              </Button>
+              <Button
+                mode="text"
+                icon="brain"
+                onPress={() => navigation.navigate("Planificador")}
+                style={styles.actionBtn}
+              >
+                {t("dashboard.planner")}
               </Button>
               <Button
                 mode="text"
                 icon="backup-restore"
                 onPress={() =>
                   Alert.alert(
-                    "Reiniciar datos",
-                    "Se restaurarán las categorías y temas por defecto y volverás a elegir oposición. ¿Continuar?",
+                    t("dashboard.resetTitle"),
+                    t("dashboard.resetMessage"),
                     [
-                      { text: "Cancelar", style: "cancel" },
+                      { text: t("common.cancel"), style: "cancel" },
                       {
-                        text: "Reiniciar",
+                        text: t("dashboard.reset"),
                         style: "destructive",
                         onPress: () => {
                           resetAll();
@@ -256,17 +317,30 @@ export default function TableScreen() {
                 }
                 style={styles.actionBtn}
               >
-                Reiniciar
+                {t("dashboard.reset")}
               </Button>
             </View>
-          ) : null}
+          </Animated.View>
           <View style={{ alignItems: "center", marginTop: 2 }}>
-            <IconButton
-              icon={actionsOpen ? "chevron-up" : "chevron-down"}
-              size={40}
-              onPress={toggleActions}
-              style={{ margin: 0 }}
-            />
+            <Animated.View
+              style={{
+                transform: [
+                  {
+                    rotate: chevronRotation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ["0deg", "180deg"],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <IconButton
+                icon="chevron-down"
+                size={40}
+                onPress={toggleActions}
+                style={{ margin: 0 }}
+              />
+            </Animated.View>
           </View>
         </Card.Content>
       </Card>
@@ -277,7 +351,7 @@ export default function TableScreen() {
         }
       >
         {topics.length === 0 ? (
-          <Text style={styles.empty}>Añade tu primer tema</Text>
+          <Text style={styles.empty}>{t("dashboard.noTopics")}</Text>
         ) : (
           <>
             {folders.map((f) => {
@@ -310,9 +384,9 @@ export default function TableScreen() {
                           />
                           <Text style={styles.folderTitle}>{f.name}</Text>
                         </View>
-                        <Text
-                          style={styles.folderGlobalTitle}
-                        >{`Progreso ${Math.round(prog * 100)}%`}</Text>
+                        <Text style={styles.folderGlobalTitle}>{`${t(
+                          "dashboard.progress"
+                        )} ${Math.round(prog * 100)}%`}</Text>
                         <ProgressBar
                           progress={prog}
                           style={styles.progressFolder}

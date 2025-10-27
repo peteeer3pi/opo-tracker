@@ -1,6 +1,13 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  getRandomCompletionMessage,
+  getRandomBulletinMessage,
+  isTopicJustCompleted,
+  isBulletinJustCompleted,
+} from "../utils/motivationalMessages";
+import { useNotificationStore } from "./useNotificationStore";
 import { TOPIC_TITLES } from "../data/titles";
 
 export type Category = {
@@ -41,6 +48,7 @@ export type StoreState = {
   folderCategoryOrder: Record<string, string[]>; // folderId -> ordered list of effective category ids (global+local)
   folderHiddenGlobals: Record<string, string[]>; // folderId -> list of global category ids hidden in this folder
   selectedOpposition?: string;
+  examDate?: string; // ISO date string
   hasHydrated: boolean;
   addCategory: (name: string) => void;
   removeCategory: (categoryId: string) => void;
@@ -58,20 +66,19 @@ export type StoreState = {
     folderId: string,
     categoryId: string,
     toIndex: number
-  ) => void; // local-only reorder
-  // Folder view mixed-order actions
+  ) => void;
   moveFolderEffective: (
     folderId: string,
     categoryId: string,
     toIndex: number
-  ) => void; // reorder overlay across globals+locals
+  ) => void;
   hideGlobalInFolder: (folderId: string, categoryId: string) => void;
   unhideGlobalInFolder: (folderId: string, categoryId: string) => void;
   setOpposition: (name: string) => void;
   addTopic: (title: string) => void;
   bulkAddTopics: (titles: string[]) => void;
   removeTopic: (topicId: string) => void;
-  toggleCheck: (topicId: string, categoryId: string) => void;
+  toggleCheck: (topicId: string, categoryId: string, visibleCategoriesCount?: number) => void;
   renameTopic: (topicId: string, title: string) => void;
   setTopicNote: (topicId: string, note: string) => void;
   incrementReview: (topicId: string) => void;
@@ -86,6 +93,7 @@ export type StoreState = {
   updateBulletinExerciseCount: (bulletinId: string, exerciseCount: number) => void;
   toggleExercise: (bulletinId: string, exerciseNumber: number) => void;
   moveBulletinToFolder: (bulletinId: string, folderId?: string) => void;
+  setExamDate: (date?: string) => void;
   resetAll: () => void;
 };
 
@@ -123,6 +131,7 @@ export const useStore = create<StoreState>()(
       folderCategories: {},
       folderCategoryOrder: {},
       folderHiddenGlobals: {},
+      examDate: undefined,
       hasHydrated: false,
 
       setOpposition: (name) => {
@@ -133,7 +142,6 @@ export const useStore = create<StoreState>()(
         set({ selectedOpposition: clean, topics });
       },
 
-      // Folder-specific categories CRUD
       addFolderCategory: (folderId, name) => {
         const clean = name.trim();
         if (!clean) return;
@@ -143,10 +151,8 @@ export const useStore = create<StoreState>()(
         if (existing) return;
         const newCat: Category = { id, name: clean };
         const next = { ...map, [folderId]: [...(map[folderId] ?? []), newCat] };
-        // Append to per-folder order overlay at the end
         const orderMap = { ...get().folderCategoryOrder };
         orderMap[folderId] = [...(orderMap[folderId] ?? []), id];
-        // Add check key for topics currently in this folder
         const topics = get().topics.map((t) =>
           t.folderId === folderId
             ? { ...t, checks: { ...t.checks, [id]: false } }
@@ -159,12 +165,10 @@ export const useStore = create<StoreState>()(
         const map = get().folderCategories;
         const list = (map[folderId] ?? []).filter((c) => c.id !== categoryId);
         const next = { ...map, [folderId]: list };
-        // Remove from per-folder ordering as well
         const orderMap = { ...get().folderCategoryOrder };
         orderMap[folderId] = (orderMap[folderId] ?? []).filter(
           (id) => id !== categoryId
         );
-        // Remove check key from topics in this folder
         const topics = get().topics.map((t) => {
           if (t.folderId !== folderId) return t;
           const { [categoryId]: _omit, ...rest } = t.checks;
@@ -220,7 +224,6 @@ export const useStore = create<StoreState>()(
       },
 
       addCategory: (name) => {
-        // global categories
         const clean = name.trim();
         if (!clean) return;
         const id = clean.toLowerCase().replace(/\s+/g, "-");
@@ -266,7 +269,6 @@ export const useStore = create<StoreState>()(
         const ordered = orderedIds
           .map((id) => map.get(id))
           .filter((c): c is Category => !!c);
-        // In case some categories are not included, append them at the end
         const remaining = get().categories.filter(
           (c) => !orderedIds.includes(c.id)
         );
@@ -315,11 +317,17 @@ export const useStore = create<StoreState>()(
         set({ topics: get().topics.filter((t) => t.id !== topicId) });
       },
 
-      toggleCheck: (topicId, categoryId) => {
+      toggleCheck: (topicId, categoryId, visibleCategoriesCount) => {
+        const categories = get().categories;
+        const topic = get().topics.find((t) => t.id === topicId);
+        
+        if (!topic) return;
+        
+        const current = !!topic.checks[categoryId];
+        const next = !current;
+        
         const topics = get().topics.map((t) => {
           if (t.id !== topicId) return t;
-          const current = !!t.checks[categoryId];
-          const next = !current;
           let reviewCount = t.reviewCount ?? 0;
           if (categoryId === "repasado") {
             reviewCount = next ? (reviewCount > 0 ? reviewCount : 1) : 0;
@@ -332,6 +340,18 @@ export const useStore = create<StoreState>()(
           };
         });
         set({ topics });
+        
+        const totalCategories = visibleCategoriesCount ?? categories.length;
+        
+        if (next && isTopicJustCompleted(
+          { ...topic.checks, [categoryId]: next },
+          categoryId,
+          totalCategories
+        )) {
+          setTimeout(() => {
+            useNotificationStore.getState().showNotification(getRandomCompletionMessage());
+          }, 300);
+        }
       },
 
       renameTopic: (topicId, title) => {
@@ -402,7 +422,6 @@ export const useStore = create<StoreState>()(
         const folders = get().folders.filter((f) => f.id !== folderId);
         const topics = get().topics.map((t) => {
           if (t.folderId !== folderId) return t;
-          // prune checks for folder-specific categories of this folder
           const prunedChecks = Object.fromEntries(
             Object.entries(t.checks).filter(
               ([key]) => !key.startsWith(`fcat_${folderId}_`)
@@ -453,7 +472,6 @@ export const useStore = create<StoreState>()(
           if (t.id !== topicId) return t;
           const prevFolder = t.folderId;
           let checks = { ...t.checks };
-          // prune old folder-specific checks when leaving a folder
           if (prevFolder && prevFolder !== folderId) {
             checks = Object.fromEntries(
               Object.entries(checks).filter(
@@ -461,7 +479,6 @@ export const useStore = create<StoreState>()(
               )
             );
           }
-          // add missing checks for new folder's categories
           if (folderId) {
             const fCats = current.folderCategories[folderId] ?? [];
             for (const c of fCats) {
@@ -510,7 +527,6 @@ export const useStore = create<StoreState>()(
         const bulletins = get().bulletins.map((b) => {
           if (b.id !== bulletinId) return b;
           const newCompleted: Record<number, boolean> = {};
-          // Mantener los ejercicios existentes que estén dentro del nuevo rango
           for (let i = 1; i <= exerciseCount; i++) {
             newCompleted[i] = b.completedExercises[i] ?? false;
           }
@@ -525,19 +541,35 @@ export const useStore = create<StoreState>()(
       },
 
       toggleExercise: (bulletinId, exerciseNumber) => {
+        const bulletin = get().bulletins.find((b) => b.id === bulletinId);
+        
+        if (!bulletin) return;
+        
+        const current = !!bulletin.completedExercises[exerciseNumber];
+        const next = !current;
+        
         const bulletins = get().bulletins.map((b) => {
           if (b.id !== bulletinId) return b;
-          const current = !!b.completedExercises[exerciseNumber];
           return {
             ...b,
             completedExercises: {
               ...b.completedExercises,
-              [exerciseNumber]: !current,
+              [exerciseNumber]: next,
             },
             updatedAt: Date.now(),
           };
         });
         set({ bulletins });
+        
+        if (next && isBulletinJustCompleted(
+          { ...bulletin.completedExercises, [exerciseNumber]: next },
+          exerciseNumber,
+          bulletin.exerciseCount
+        )) {
+          setTimeout(() => {
+            useNotificationStore.getState().showNotification(getRandomBulletinMessage());
+          }, 300);
+        }
       },
 
       moveBulletinToFolder: (bulletinId, folderId) => {
@@ -545,6 +577,10 @@ export const useStore = create<StoreState>()(
           b.id === bulletinId ? { ...b, folderId } : b
         );
         set({ bulletins });
+      },
+
+      setExamDate: (date) => {
+        set({ examDate: date });
       },
 
       resetAll: () => {
@@ -573,6 +609,7 @@ export const useStore = create<StoreState>()(
         folderCategoryOrder: state.folderCategoryOrder,
         folderHiddenGlobals: state.folderHiddenGlobals,
         selectedOpposition: state.selectedOpposition,
+        examDate: state.examDate,
       }),
       onRehydrateStorage: () => () => {
         useStore.setState({ hasHydrated: true });
@@ -581,13 +618,11 @@ export const useStore = create<StoreState>()(
   )
 );
 
-// Helpers to generate folder category IDs
 export const makeFolderCategoryId = (folderId: string, name: string) => {
   const slug = name.trim().toLowerCase().replace(/\s+/g, "-");
   return `fcat_${folderId}_${slug}`;
 };
 
-// Compute ordered effective categories for a folder view
 export const getEffectiveCategories = (
   globals: Category[],
   locals: Category[] | undefined,
@@ -605,7 +640,6 @@ export const getEffectiveCategories = (
     return Array.from(presentMap.values());
   }
   const ordered: Category[] = [];
-  // Place by order if exists
   for (const id of order) {
     const c = presentMap.get(id);
     if (c) {
@@ -613,7 +647,6 @@ export const getEffectiveCategories = (
       presentMap.delete(id);
     }
   }
-  // Append any remaining not in order
   for (const c of presentMap.values()) ordered.push(c);
   return ordered;
 };

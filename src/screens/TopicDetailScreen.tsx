@@ -20,8 +20,10 @@ import {
 } from "react-native-paper";
 import { useStore } from "../store/useStore";
 import { topicProgress } from "../utils/progress";
+import { useTranslation } from "react-i18next";
 
 export default function TopicDetailScreen() {
+  const { t } = useTranslation();
   const route = useRoute<RouteProp<RootStackParamList, "Tema">>();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -54,7 +56,7 @@ export default function TopicDetailScreen() {
   if (!topic) {
     return (
       <View style={styles.container}>
-        <Text>El tema no existe.</Text>
+        <Text>{t('topic.title')} no existe.</Text>
       </View>
     );
   }
@@ -63,15 +65,15 @@ export default function TopicDetailScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Card style={styles.card}>
         <Card.Title
-          title="Detalle del tema"
-          subtitle={`Actualizado: ${
+          title={t('topic.title')}
+          subtitle={`${t('topic.updated')}: ${
             topic.updatedAt ? new Date(topic.updatedAt).toLocaleString() : "—"
           }`}
         />
         <Card.Content>
           <TextInput
             mode="outlined"
-            label="Título"
+            label={t('topic.title')}
             value={title}
             onChangeText={setTitle}
             onBlur={() => title.trim() && renameTopic(topic.id, title)}
@@ -83,8 +85,8 @@ export default function TopicDetailScreen() {
           />
           <TextInput
             mode="outlined"
-            label="Nota"
-            placeholder="Añade una nota (opcional)"
+            label={t('topic.note')}
+            placeholder={t('topic.notePlaceholder')}
             value={note}
             onChangeText={setNote}
             onBlur={() => setTopicNote(topic.id, note)}
@@ -93,13 +95,13 @@ export default function TopicDetailScreen() {
           <View style={{ height: 12 }} />
           <ProgressBar progress={progress} style={styles.progress} />
           <Text style={styles.progressLabel}>
-            {(progress * 100).toFixed(0)}% completado
+            {t('topic.progress')}: {(progress * 100).toFixed(0)}%
           </Text>
         </Card.Content>
       </Card>
 
       <Card style={styles.card}>
-        <Card.Title title="Categorías" subtitle="Pulsa para marcar/desmarcar" />
+        <Card.Title title={t('categories.title')} subtitle={t('topic.checkSubtitle')} />
         <Card.Content>
           {categories.map((c) => (
             <Pressable
@@ -124,12 +126,12 @@ export default function TopicDetailScreen() {
         textColor="#fff"
         onPress={() => {
           Alert.alert(
-            "Eliminar tema",
-            "¿Seguro que quieres eliminar este tema?",
+            t('topic.deleteTitle'),
+            t('topic.deleteMessage'),
             [
-              { text: "Cancelar", style: "cancel" },
+              { text: t('common.cancel'), style: "cancel" },
               {
-                text: "Eliminar",
+                text: t('common.delete'),
                 style: "destructive",
                 onPress: () => {
                   removeTopic(topic.id);
@@ -141,7 +143,7 @@ export default function TopicDetailScreen() {
         }}
         style={{ alignSelf: "center", marginTop: 12 }}
       >
-        Eliminar tema
+        {t('topic.deleteTitle')}
       </Button>
     </ScrollView>
   );
