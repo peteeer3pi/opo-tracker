@@ -23,7 +23,12 @@ import {
 } from "react-native-paper";
 import { useStore, getEffectiveCategories } from "../store/useStore";
 import { Alert } from "react-native";
-import { globalProgress, topicProgress } from "../utils/progress";
+import {
+  globalProgress,
+  topicProgress,
+  folderProgressWithBulletins,
+  bulletinsOnlyProgress,
+} from "../utils/progress";
 import { useTranslation } from "react-i18next";
 
 export default function FolderScreen() {
@@ -88,8 +93,19 @@ export default function FolderScreen() {
   );
 
   const prog = useMemo(
-    () => globalProgress(sectionTopics, effectiveCategories),
-    [sectionTopics, effectiveCategories]
+    () =>
+      folderProgressWithBulletins(
+        sectionTopics,
+        effectiveCategories,
+        sectionBulletins,
+        folderId
+      ),
+    [sectionTopics, effectiveCategories, sectionBulletins, folderId]
+  );
+
+  const bulletinsProgress = useMemo(
+    () => bulletinsOnlyProgress(sectionBulletins),
+    [sectionBulletins]
   );
 
   const categoryProgress = (topicsSubset: typeof topics) => {
@@ -162,33 +178,35 @@ export default function FolderScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Card mode="elevated" style={styles.card}>
         <Card.Title
-          title={`${folderName} · ${t('folder.progress')} ${Math.round(prog * 100)}%`}
+          title={`${folderName} · ${t("folder.progress")} ${Math.round(
+            prog * 100
+          )}%`}
           right={() =>
             folderId ? (
               <IconButton
                 icon="dots-vertical"
                 size={20}
                 onPress={() => {
-                  Alert.alert(t('folder.actions'), folderName, [
+                  Alert.alert(t("folder.actions"), folderName, [
                     {
-                      text: t('folder.renameButton'),
+                      text: t("folder.renameButton"),
                       onPress: () => {
                         setRenameFolderName(folderName);
                         setShowRenameFolder(true);
                       },
                     },
                     {
-                      text: t('folder.deleteButton'),
+                      text: t("folder.deleteButton"),
                       style: "destructive",
                       onPress: () => {
                         if (!folderId) return;
                         Alert.alert(
-                          t('folder.deleteTitle'),
-                          t('folder.deleteMessage'),
+                          t("folder.deleteTitle"),
+                          t("folder.deleteMessage"),
                           [
-                            { text: t('common.cancel'), style: "cancel" },
+                            { text: t("common.cancel"), style: "cancel" },
                             {
-                              text: t('folder.deleteButton'),
+                              text: t("folder.deleteButton"),
                               style: "destructive",
                               onPress: () => {
                                 removeFolder(folderId);
@@ -199,7 +217,7 @@ export default function FolderScreen() {
                         );
                       },
                     },
-                    { text: t('common.cancel'), style: "cancel" },
+                    { text: t("common.cancel"), style: "cancel" },
                   ]);
                 }}
               />
@@ -216,8 +234,10 @@ export default function FolderScreen() {
           >
             <Text style={styles.catName}>
               {progressFilter === "__global__"
-                ? t('folder.globalProgress')
-                : `${t('folder.progressBy')} · ${
+                ? t("folder.globalProgress")
+                : progressFilter === "__bulletins__"
+                ? "Progreso de Boletines"
+                : `${t("folder.progressBy")} · ${
                     categories.find((c) => c.id === progressFilter)?.name ?? ""
                   }`}
             </Text>
@@ -229,17 +249,26 @@ export default function FolderScreen() {
           {(() => {
             const perCat = categoryProgress(sectionTopics);
             const isGlobal = progressFilter === "__global__";
-            const value = isGlobal ? prog : perCat[progressFilter] ?? 0;
+            const isBulletins = progressFilter === "__bulletins__";
+            let value = 0;
+            if (isGlobal) {
+              value = prog;
+            } else if (isBulletins) {
+              value = bulletinsProgress;
+            } else {
+              value = perCat[progressFilter] ?? 0;
+            }
             const idx = effectiveCategories.findIndex(
               (c) => c.id === progressFilter
             );
-            const color = isGlobal
-              ? undefined
-              : categoryColors[idx >= 0 ? idx % categoryColors.length : 0];
+            const color =
+              isGlobal || isBulletins
+                ? undefined
+                : categoryColors[idx >= 0 ? idx % categoryColors.length : 0];
             return (
               <View style={{ marginTop: 8 }}>
                 <View style={styles.catHeaderRow}>
-                  <Text style={styles.catName}>{t('folder.completed')}</Text>
+                  <Text style={styles.catName}>{t("folder.completed")}</Text>
                   <Text style={styles.catPercent}>
                     {`${Math.round((value ?? 0) * 100)}%`}
                   </Text>
@@ -271,9 +300,7 @@ export default function FolderScreen() {
               onPress={() => setShowBulk(true)}
               style={styles.actionBtnSm}
             >
-              {folderId
-                ? t('folder.addTopics')
-                : t('folder.removeTopics')}
+              {folderId ? t("folder.addTopics") : t("folder.removeTopics")}
             </Button>
             {folderId ? (
               <Button
@@ -283,7 +310,7 @@ export default function FolderScreen() {
                 onPress={() => navigation.navigate("Categorías", { folderId })}
                 style={styles.actionBtnSm}
               >
-                {t('folder.manageCategories')}
+                {t("folder.manageCategories")}
               </Button>
             ) : null}
           </View>
@@ -293,9 +320,7 @@ export default function FolderScreen() {
       <Portal>
         <Dialog visible={showBulk} onDismiss={() => setShowBulk(false)}>
           <Dialog.Title>
-            {folderId
-              ? t('folder.selectToAdd')
-              : t('folder.selectToRemove')}
+            {folderId ? t("folder.selectToAdd") : t("folder.selectToRemove")}
           </Dialog.Title>
           <Dialog.ScrollArea>
             <ScrollView style={{ paddingHorizontal: 16, maxHeight: 360 }}>
@@ -330,21 +355,21 @@ export default function FolderScreen() {
                   onPress={selectAll}
                   disabled={candidates.length === 0}
                 >
-                  {t('common.selectAll')}
+                  {t("common.selectAll")}
                 </Button>
                 <Button
                   compact
                   style={styles.actionBtnSm}
                   onPress={clearSelection}
                 >
-                  {t('common.clear')}
+                  {t("common.clear")}
                 </Button>
                 <Button
                   compact
                   style={styles.actionBtnSm}
                   onPress={() => setShowBulk(false)}
                 >
-                  {t('common.cancel')}
+                  {t("common.cancel")}
                 </Button>
               </View>
               <Button
@@ -355,8 +380,8 @@ export default function FolderScreen() {
                 disabled={selectedCount === 0}
               >
                 {folderId
-                  ? `${t('common.move')} (${selectedCount})`
-                  : `${t('folder.removeTopics')} (${selectedCount})`}
+                  ? `${t("common.move")} (${selectedCount})`
+                  : `${t("folder.removeTopics")} (${selectedCount})`}
               </Button>
             </View>
           </Dialog.Actions>
@@ -366,11 +391,11 @@ export default function FolderScreen() {
           visible={showRenameFolder}
           onDismiss={() => setShowRenameFolder(false)}
         >
-          <Dialog.Title>{t('folder.rename')}</Dialog.Title>
+          <Dialog.Title>{t("folder.rename")}</Dialog.Title>
           <Dialog.Content>
             <PaperInput
               mode="outlined"
-              placeholder={t('folder.name')}
+              placeholder={t("folder.name")}
               value={renameFolderName}
               onChangeText={setRenameFolderName}
               returnKeyType="done"
@@ -384,7 +409,9 @@ export default function FolderScreen() {
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setShowRenameFolder(false)}>{t('common.cancel')}</Button>
+            <Button onPress={() => setShowRenameFolder(false)}>
+              {t("common.cancel")}
+            </Button>
             <Button
               onPress={() => {
                 const n = renameFolderName.trim();
@@ -395,7 +422,7 @@ export default function FolderScreen() {
               }}
               disabled={!renameFolderName.trim()}
             >
-              {t('common.save')}
+              {t("common.save")}
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -403,7 +430,7 @@ export default function FolderScreen() {
           visible={showProgressSelector}
           onDismiss={() => setShowProgressSelector(false)}
         >
-          <Dialog.Title>{t('folder.progress')}</Dialog.Title>
+          <Dialog.Title>{t("folder.progress")}</Dialog.Title>
           <Dialog.ScrollArea>
             <ScrollView style={{ paddingHorizontal: 16, maxHeight: 360 }}>
               <RadioButton.Group
@@ -432,7 +459,7 @@ export default function FolderScreen() {
           </Dialog.ScrollArea>
           <Dialog.Actions>
             <Button onPress={() => setShowProgressSelector(false)}>
-              {t('common.close')}
+              {t("common.close")}
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -440,7 +467,7 @@ export default function FolderScreen() {
           visible={showProgressSelector}
           onDismiss={() => setShowProgressSelector(false)}
         >
-          <Dialog.Title>{t('folder.progress')}</Dialog.Title>
+          <Dialog.Title>{t("folder.progress")}</Dialog.Title>
           <Dialog.ScrollArea>
             <ScrollView style={{ paddingHorizontal: 16, maxHeight: 360 }}>
               <RadioButton.Group
@@ -453,6 +480,13 @@ export default function FolderScreen() {
                 >
                   <RadioButton value="__global__" />
                   <Text style={styles.bulkItemText}>Global</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.bulkItem}
+                  onPress={() => setProgressFilter("__bulletins__")}
+                >
+                  <RadioButton value="__bulletins__" />
+                  <Text style={styles.bulkItemText}>Boletines</Text>
                 </Pressable>
                 {effectiveCategories.map((c) => (
                   <Pressable
@@ -469,7 +503,7 @@ export default function FolderScreen() {
           </Dialog.ScrollArea>
           <Dialog.Actions>
             <Button onPress={() => setShowProgressSelector(false)}>
-              {t('common.close')}
+              {t("common.close")}
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -480,9 +514,7 @@ export default function FolderScreen() {
           (v) => v
         ).length;
         const progB =
-          bulletin.exerciseCount > 0
-            ? completed / bulletin.exerciseCount
-            : 0;
+          bulletin.exerciseCount > 0 ? completed / bulletin.exerciseCount : 0;
         return (
           <TouchableOpacity
             key={bulletin.id}
@@ -575,12 +607,20 @@ export default function FolderScreen() {
                       <Pressable
                         key={c.id}
                         style={styles.checkboxItem}
-                        onPress={() => toggleCheck(item.id, c.id, effectiveCategories.length)}
+                        onPress={() =>
+                          toggleCheck(item.id, c.id, effectiveCategories.length)
+                        }
                         hitSlop={8}
                       >
                         <Checkbox
                           status={item.checks[c.id] ? "checked" : "unchecked"}
-                          onPress={() => toggleCheck(item.id, c.id, effectiveCategories.length)}
+                          onPress={() =>
+                            toggleCheck(
+                              item.id,
+                              c.id,
+                              effectiveCategories.length
+                            )
+                          }
                         />
                         <Text style={styles.checkboxLabel}>{c.name}</Text>
                       </Pressable>

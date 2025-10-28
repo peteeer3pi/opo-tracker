@@ -97,3 +97,38 @@ export function bulletinsOnlyProgress(bulletins: Bulletin[]): number {
 
   return completedExercises / totalExercises;
 }
+
+export function folderProgressWithBulletins(
+  topics: Topic[],
+  categories: Category[],
+  bulletins: Bulletin[],
+  folderId?: string
+): number {
+  const topicSubset = topics.filter((t) =>
+    folderId ? t.folderId === folderId : !t.folderId
+  );
+  const bulletinSubset = bulletins.filter((b) =>
+    folderId ? b.folderId === folderId : !b.folderId
+  );
+
+  const topicCells = topicSubset.length * categories.length;
+  const bulletinCells = bulletinSubset.reduce(
+    (acc, b) => acc + b.exerciseCount,
+    0
+  );
+  const totalCells = topicCells + bulletinCells;
+
+  if (totalCells === 0) return 0;
+
+  const topicsDone = topicSubset.reduce(
+    (acc, t) => acc + Object.values(t.checks).filter(Boolean).length,
+    0
+  );
+  const bulletinsDone = bulletinSubset.reduce(
+    (acc, b) =>
+      acc + Object.values(b.completedExercises).filter(Boolean).length,
+    0
+  );
+
+  return (topicsDone + bulletinsDone) / totalCells;
+}
