@@ -34,12 +34,14 @@ export default function BulletinDetailScreen() {
     bulletins,
     toggleExercise,
     renameBulletin,
+    setBulletinNote,
     updateBulletinExerciseCount,
     removeBulletin,
   } = useStore();
 
   const bulletin = bulletins.find((b) => b.id === bulletinId);
   const [title, setTitle] = useState(bulletin?.title ?? "");
+  const [note, setNote] = useState(bulletin?.note ?? "");
   const [exerciseCount, setExerciseCount] = useState(
     bulletin?.exerciseCount.toString() ?? ""
   );
@@ -66,7 +68,7 @@ export default function BulletinDetailScreen() {
   if (!bulletin) {
     return (
       <View style={styles.container}>
-        <Text>{t('bulletin.title')} no existe.</Text>
+        <Text>{t("bulletin.title")} no existe.</Text>
       </View>
     );
   }
@@ -83,102 +85,114 @@ export default function BulletinDetailScreen() {
     >
       <Pressable onPress={Keyboard.dismiss}>
         <Card style={styles.card}>
-        <Card.Title
-          title={t('bulletin.title')}
-          subtitle={`${t('bulletin.updated')}: ${
-            bulletin.updatedAt
-              ? new Date(bulletin.updatedAt).toLocaleString()
-              : "—"
-          }`}
-          right={(props) => (
-            <IconButton
-              {...props}
-              icon="delete"
-              iconColor="#ef4444"
-              onPress={() => {
-                Alert.alert(
-                  t('bulletin.deleteTitle'),
-                  t('bulletin.deleteMessage'),
-                  [
-                    { text: t('common.cancel'), style: "cancel" },
-                    {
-                      text: t('common.delete'),
-                      style: "destructive",
-                      onPress: () => {
-                        removeBulletin(bulletin.id);
-                        navigation.goBack();
+          <Card.Title
+            title={t("bulletin.title")}
+            subtitle={`${t("bulletin.updated")}: ${
+              bulletin.updatedAt
+                ? new Date(bulletin.updatedAt).toLocaleString()
+                : "—"
+            }`}
+            right={(props) => (
+              <IconButton
+                {...props}
+                icon="delete"
+                iconColor="#ef4444"
+                onPress={() => {
+                  Alert.alert(
+                    t("bulletin.deleteTitle"),
+                    t("bulletin.deleteMessage"),
+                    [
+                      { text: t("common.cancel"), style: "cancel" },
+                      {
+                        text: t("common.delete"),
+                        style: "destructive",
+                        onPress: () => {
+                          removeBulletin(bulletin.id);
+                          navigation.goBack();
+                        },
                       },
-                    },
-                  ]
-                );
-              }}
+                    ]
+                  );
+                }}
+              />
+            )}
+          />
+          <Card.Content>
+            <TextInput
+              mode="outlined"
+              label={t("bulletin.title")}
+              value={title}
+              onChangeText={setTitle}
+              onBlur={() => title.trim() && renameBulletin(bulletin.id, title)}
+              returnKeyType="next"
+              style={{ marginBottom: 12 }}
             />
-          )}
-        />
-        <Card.Content>
-          <TextInput
-            mode="outlined"
-            label={t('bulletin.title')}
-            value={title}
-            onChangeText={setTitle}
-            onBlur={() => title.trim() && renameBulletin(bulletin.id, title)}
-            returnKeyType="next"
-            style={{ marginBottom: 12 }}
-          />
-          <TextInput
-            mode="outlined"
-            label={t('bulletin.exerciseCount')}
-            value={exerciseCount}
-            onChangeText={(text) => {
-              const numericText = text.replace(/[^0-9]/g, "");
-              setExerciseCount(numericText);
-            }}
-            onBlur={() => {
-              const count = parseInt(exerciseCount, 10);
-              if (count > 0) {
-                updateBulletinExerciseCount(bulletin.id, count);
-              } else {
-                setExerciseCount(bulletin.exerciseCount.toString());
-              }
-            }}
-            keyboardType="number-pad"
-            style={{ marginBottom: 12 }}
-          />
-          <View style={{ height: 12 }} />
-          <ProgressBar progress={progress} style={styles.progress} />
-          <Text style={styles.progressLabel}>
-            {t('bulletin.completed')}: {completedCount} / {bulletin.exerciseCount}
-            ({(progress * 100).toFixed(0)}%)
-          </Text>
-        </Card.Content>
-      </Card>
+            <TextInput
+              mode="outlined"
+              label={t("bulletin.exerciseCount")}
+              value={exerciseCount}
+              onChangeText={(text) => {
+                const numericText = text.replace(/[^0-9]/g, "");
+                setExerciseCount(numericText);
+              }}
+              onBlur={() => {
+                const count = parseInt(exerciseCount, 10);
+                if (count > 0) {
+                  updateBulletinExerciseCount(bulletin.id, count);
+                } else {
+                  setExerciseCount(bulletin.exerciseCount.toString());
+                }
+              }}
+              keyboardType="number-pad"
+              style={{ marginBottom: 12 }}
+            />
+            <TextInput
+              mode="outlined"
+              label={t("bulletin.note")}
+              placeholder={t("bulletin.notePlaceholder")}
+              value={note}
+              onChangeText={setNote}
+              onBlur={() => setBulletinNote(bulletin.id, note)}
+              multiline
+              style={{ marginBottom: 12 }}
+            />
+            <View style={{ height: 12 }} />
+            <ProgressBar progress={progress} style={styles.progress} />
+            <Text style={styles.progressLabel}>
+              {t("bulletin.completed")}: {completedCount} /{" "}
+              {bulletin.exerciseCount}({(progress * 100).toFixed(0)}%)
+            </Text>
+          </Card.Content>
+        </Card>
 
-      <Card style={styles.card}>
-        <Card.Title
-          title={t('bulletin.exercises')}
-          subtitle={t('bulletin.checkSubtitle')}
-        />
-        <Card.Content>
-          <View style={styles.exercisesGrid}>
-            {exercises.map((num) => (
-              <Pressable
-                key={num}
-                style={styles.exerciseItem}
-                onPress={() => toggleExercise(bulletin.id, num)}
-                hitSlop={8}
-              >
-                <Checkbox
-                  status={
-                    bulletin.completedExercises[num] ? "checked" : "unchecked"
-                  }
+        <Card style={styles.card}>
+          <Card.Title
+            title={t("bulletin.exercises")}
+            subtitle={t("bulletin.checkSubtitle")}
+          />
+          <Card.Content>
+            <View style={styles.exercisesGrid}>
+              {exercises.map((num) => (
+                <Pressable
+                  key={num}
+                  style={styles.exerciseItem}
                   onPress={() => toggleExercise(bulletin.id, num)}
-                />
-                <Text style={styles.exerciseNumber}>{t('bulletin.exercises')} {num}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Card.Content>
-      </Card>
+                  hitSlop={8}
+                >
+                  <Checkbox
+                    status={
+                      bulletin.completedExercises[num] ? "checked" : "unchecked"
+                    }
+                    onPress={() => toggleExercise(bulletin.id, num)}
+                  />
+                  <Text style={styles.exerciseNumber}>
+                    {t("bulletin.exercises")} {num}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </Card.Content>
+        </Card>
       </Pressable>
     </ScrollView>
   );

@@ -148,6 +148,9 @@ export default function FolderScreen() {
   const [progressFilter, setProgressFilter] = useState<string>("__global__");
   const [showProgressSelector, setShowProgressSelector] = useState(false);
 
+  const [showNote, setShowNote] = useState(false);
+  const [noteToShow, setNoteToShow] = useState("");
+
   const candidates = useMemo(() => {
     return folderId
       ? topics.filter((t) => t.folderId !== folderId)
@@ -507,6 +510,16 @@ export default function FolderScreen() {
             </Button>
           </Dialog.Actions>
         </Dialog>
+
+        <Dialog visible={showNote} onDismiss={() => setShowNote(false)}>
+          <Dialog.Title>Nota</Dialog.Title>
+          <Dialog.Content>
+            <Text>{noteToShow}</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowNote(false)}>Cerrar</Button>
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
 
       {sectionBulletins.map((bulletin) => {
@@ -533,28 +546,40 @@ export default function FolderScreen() {
                     size={20}
                   />
                 )}
-                right={() =>
-                  folderId ? (
-                    <IconButton
-                      icon="folder-remove-outline"
-                      size={18}
-                      onPress={() => {
-                        Alert.alert(
-                          "Quitar de la carpeta",
-                          "Este boletín pasará a estar fuera de la carpeta. ¿Confirmar?",
-                          [
-                            { text: "Cancelar", style: "cancel" },
-                            {
-                              text: "Quitar",
-                              onPress: () =>
-                                moveBulletinToFolder(bulletin.id, undefined),
-                            },
-                          ]
-                        );
-                      }}
-                    />
-                  ) : null
-                }
+                right={() => (
+                  <View style={styles.rightIcons}>
+                    {folderId ? (
+                      <IconButton
+                        icon="folder-remove-outline"
+                        size={18}
+                        onPress={() => {
+                          Alert.alert(
+                            "Quitar de la carpeta",
+                            "Este boletín pasará a estar fuera de la carpeta. ¿Confirmar?",
+                            [
+                              { text: "Cancelar", style: "cancel" },
+                              {
+                                text: "Quitar",
+                                onPress: () =>
+                                  moveBulletinToFolder(bulletin.id, undefined),
+                              },
+                            ]
+                          );
+                        }}
+                      />
+                    ) : null}
+                    {bulletin.note && bulletin.note.trim().length > 0 ? (
+                      <IconButton
+                        icon="information-outline"
+                        size={16}
+                        onPress={() => {
+                          setNoteToShow(bulletin.note as string);
+                          setShowNote(true);
+                        }}
+                      />
+                    ) : null}
+                  </View>
+                )}
               />
               <Card.Content>
                 <ProgressBar progress={progB} style={styles.progressSmall} />
@@ -577,28 +602,40 @@ export default function FolderScreen() {
             <Card mode="outlined" style={styles.rowCard}>
               <Card.Title
                 title={item.title}
-                right={() =>
-                  folderId ? (
-                    <IconButton
-                      icon="folder-remove-outline"
-                      size={18}
-                      onPress={() => {
-                        Alert.alert(
-                          "Quitar de la carpeta",
-                          "Este tema pasará a estar fuera de la carpeta. ¿Confirmar?",
-                          [
-                            { text: "Cancelar", style: "cancel" },
-                            {
-                              text: "Quitar",
-                              onPress: () =>
-                                moveTopicToFolder(item.id, undefined),
-                            },
-                          ]
-                        );
-                      }}
-                    />
-                  ) : null
-                }
+                right={() => (
+                  <View style={styles.rightIcons}>
+                    {folderId ? (
+                      <IconButton
+                        icon="folder-remove-outline"
+                        size={18}
+                        onPress={() => {
+                          Alert.alert(
+                            "Quitar de la carpeta",
+                            "Este tema pasará a estar fuera de la carpeta. ¿Confirmar?",
+                            [
+                              { text: "Cancelar", style: "cancel" },
+                              {
+                                text: "Quitar",
+                                onPress: () =>
+                                  moveTopicToFolder(item.id, undefined),
+                              },
+                            ]
+                          );
+                        }}
+                      />
+                    ) : null}
+                    {item.note && item.note.trim().length > 0 ? (
+                      <IconButton
+                        icon="information-outline"
+                        size={16}
+                        onPress={() => {
+                          setNoteToShow(item.note as string);
+                          setShowNote(true);
+                        }}
+                      />
+                    ) : null}
+                  </View>
+                )}
               />
               <Card.Content>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -690,6 +727,7 @@ const styles = StyleSheet.create({
   catBarTrack: { backgroundColor: "#e5e7eb" },
   bulkRow: { marginTop: 10 },
   rowCard: { marginBottom: 10 },
+  rightIcons: { flexDirection: "row", alignItems: "center" },
   checkboxRow: { flexDirection: "row", alignItems: "center" },
   checkboxItem: { flexDirection: "row", alignItems: "center", marginRight: 16 },
   checkboxLabel: { marginLeft: 4 },

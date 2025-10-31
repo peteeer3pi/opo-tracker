@@ -35,6 +35,7 @@ export type Bulletin = {
   title: string;
   exerciseCount: number;
   completedExercises: Record<number, boolean>; // key: exercise number (1-based)
+  note?: string;
   updatedAt?: number;
   folderId?: string;
 };
@@ -78,7 +79,11 @@ export type StoreState = {
   addTopic: (title: string) => void;
   bulkAddTopics: (titles: string[]) => void;
   removeTopic: (topicId: string) => void;
-  toggleCheck: (topicId: string, categoryId: string, visibleCategoriesCount?: number) => void;
+  toggleCheck: (
+    topicId: string,
+    categoryId: string,
+    visibleCategoriesCount?: number
+  ) => void;
   renameTopic: (topicId: string, title: string) => void;
   setTopicNote: (topicId: string, note: string) => void;
   incrementReview: (topicId: string) => void;
@@ -87,10 +92,18 @@ export type StoreState = {
   renameFolder: (folderId: string, name: string) => void;
   removeFolder: (folderId: string) => void;
   moveTopicToFolder: (topicId: string, folderId?: string) => void;
-  addBulletin: (title: string, exerciseCount: number, folderId?: string) => void;
+  addBulletin: (
+    title: string,
+    exerciseCount: number,
+    folderId?: string
+  ) => void;
   removeBulletin: (bulletinId: string) => void;
   renameBulletin: (bulletinId: string, title: string) => void;
-  updateBulletinExerciseCount: (bulletinId: string, exerciseCount: number) => void;
+  setBulletinNote: (bulletinId: string, note: string) => void;
+  updateBulletinExerciseCount: (
+    bulletinId: string,
+    exerciseCount: number
+  ) => void;
   toggleExercise: (bulletinId: string, exerciseNumber: number) => void;
   moveBulletinToFolder: (bulletinId: string, folderId?: string) => void;
   setExamDate: (date?: string) => void;
@@ -320,12 +333,12 @@ export const useStore = create<StoreState>()(
       toggleCheck: (topicId, categoryId, visibleCategoriesCount) => {
         const categories = get().categories;
         const topic = get().topics.find((t) => t.id === topicId);
-        
+
         if (!topic) return;
-        
+
         const current = !!topic.checks[categoryId];
         const next = !current;
-        
+
         const topics = get().topics.map((t) => {
           if (t.id !== topicId) return t;
           let reviewCount = t.reviewCount ?? 0;
@@ -340,16 +353,21 @@ export const useStore = create<StoreState>()(
           };
         });
         set({ topics });
-        
+
         const totalCategories = visibleCategoriesCount ?? categories.length;
-        
-        if (next && isTopicJustCompleted(
-          { ...topic.checks, [categoryId]: next },
-          categoryId,
-          totalCategories
-        )) {
+
+        if (
+          next &&
+          isTopicJustCompleted(
+            { ...topic.checks, [categoryId]: next },
+            categoryId,
+            totalCategories
+          )
+        ) {
           setTimeout(() => {
-            useNotificationStore.getState().showNotification(getRandomCompletionMessage());
+            useNotificationStore
+              .getState()
+              .showNotification(getRandomCompletionMessage());
           }, 300);
         }
       },
@@ -522,6 +540,13 @@ export const useStore = create<StoreState>()(
         set({ bulletins });
       },
 
+      setBulletinNote: (bulletinId, note) => {
+        const bulletins = get().bulletins.map((b) =>
+          b.id === bulletinId ? { ...b, note, updatedAt: Date.now() } : b
+        );
+        set({ bulletins });
+      },
+
       updateBulletinExerciseCount: (bulletinId, exerciseCount) => {
         if (exerciseCount < 1) return;
         const bulletins = get().bulletins.map((b) => {
@@ -542,12 +567,12 @@ export const useStore = create<StoreState>()(
 
       toggleExercise: (bulletinId, exerciseNumber) => {
         const bulletin = get().bulletins.find((b) => b.id === bulletinId);
-        
+
         if (!bulletin) return;
-        
+
         const current = !!bulletin.completedExercises[exerciseNumber];
         const next = !current;
-        
+
         const bulletins = get().bulletins.map((b) => {
           if (b.id !== bulletinId) return b;
           return {
@@ -560,14 +585,19 @@ export const useStore = create<StoreState>()(
           };
         });
         set({ bulletins });
-        
-        if (next && isBulletinJustCompleted(
-          { ...bulletin.completedExercises, [exerciseNumber]: next },
-          exerciseNumber,
-          bulletin.exerciseCount
-        )) {
+
+        if (
+          next &&
+          isBulletinJustCompleted(
+            { ...bulletin.completedExercises, [exerciseNumber]: next },
+            exerciseNumber,
+            bulletin.exerciseCount
+          )
+        ) {
           setTimeout(() => {
-            useNotificationStore.getState().showNotification(getRandomBulletinMessage());
+            useNotificationStore
+              .getState()
+              .showNotification(getRandomBulletinMessage());
           }, 300);
         }
       },

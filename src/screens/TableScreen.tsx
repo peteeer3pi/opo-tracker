@@ -34,6 +34,7 @@ import {
   folderTotals,
   globalProgressWithBulletins,
   bulletinsOnlyProgress,
+  folderProgressWithBulletins,
 } from "../utils/progress";
 import { useTranslation } from "react-i18next";
 import LanguageSelector from "../components/LanguageSelector";
@@ -356,13 +357,21 @@ export default function TableScreen() {
           <>
             {folders.map((f) => {
               const sectionTopics = topics.filter((t) => t.folderId === f.id);
+              const sectionBulletins = bulletins.filter(
+                (b) => b.folderId === f.id
+              );
               const effectiveCats = getEffectiveCategories(
                 categories,
                 folderCategories[f.id] ?? [],
                 folderCategoryOrder[f.id] ?? [],
                 folderHiddenGlobals[f.id] ?? []
               );
-              const prog = globalProgress(sectionTopics, effectiveCats);
+              const prog = folderProgressWithBulletins(
+                sectionTopics,
+                effectiveCats,
+                sectionBulletins,
+                f.id
+              );
               return (
                 <View
                   key={f.id}
@@ -403,7 +412,12 @@ export default function TableScreen() {
               const sectionBulletins = bulletins.filter((b) => !b.folderId);
               if (sectionTopics.length === 0 && sectionBulletins.length === 0)
                 return null;
-              const prog = globalProgress(sectionTopics, categories);
+              const prog = folderProgressWithBulletins(
+                sectionTopics,
+                categories,
+                sectionBulletins,
+                undefined
+              );
               const { done, total } = folderTotals(
                 sectionTopics,
                 categories,
@@ -452,6 +466,17 @@ export default function TableScreen() {
                                     setShowMoveBulletin(true);
                                   }}
                                 />
+                                {bulletin.note &&
+                                bulletin.note.trim().length > 0 ? (
+                                  <IconButton
+                                    icon="information-outline"
+                                    size={16}
+                                    onPress={() => {
+                                      setNoteToShow(bulletin.note as string);
+                                      setShowNote(true);
+                                    }}
+                                  />
+                                ) : null}
                               </View>
                             )}
                           />

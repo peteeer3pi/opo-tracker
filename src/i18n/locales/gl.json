@@ -73,6 +73,8 @@
   },
   "bulletin": {
     "title": "Boletín",
+    "note": "Nota",
+    "notePlaceholder": "Escribe unha nota sobre este boletín...",
     "exercises": "Exercicios",
     "exerciseCount": "Número de exercicios",
     "completed": "Completados",
